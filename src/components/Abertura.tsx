@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Lente } from './lente/lente'
-import { LOGO_OURO } from '../lib/marca'
 
 const KEY = 'flow.abertura'
-/* 1) A Lente faz a revelação (~3,8 s) e o "f" fica parado no meio.
-   2) A tela se dissolve no vídeo do Higgsfield: o "f" dourado da logo, sobre o verde, vira um jato de ouro
-      que se afasta para o fundo da tela até sumir.
-   3) Quando o avião está sumindo, o fundo se abre e os cartões entram. */
-const REVELACAO = 4100 // ms até a marca ficar parada no meio
-const VIDEO_VOO: string = (import.meta.env.VITE_VIDEO_VOO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/ec2166fd-7b9d-4f32-bbf0-9a649352249f.mp4'
+/* Abertura: o "f" dourado da logo, sobre fundo preto, vira um jato e voa para o fundo da tela.
+   Perto do fim do vídeo os cartões das viagens são liberados. */
+const VIDEO_VOO: string = (import.meta.env.VITE_VIDEO_VOO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/e4c2b2c6-3fa6-491c-be7a-9013bee5cbfd.mp4'
 const LIBERAR_ANTES_DO_FIM = 0.9 // s antes do fim do vídeo em que os cartões começam a entrar
 
 /** Avisa a tela de viagens que pode abrir o leque. */
@@ -17,8 +12,7 @@ const liberarCartoes = () => {
   window.dispatchEvent(new Event('flow:abertura-fim'))
 }
 
-/** Abertura do app: efeito Lente igual à referência (vidro claro, fundo areia), com o símbolo do Flow, e o "f"
- *  que vira avião e voa para o fundo da tela. Uma vez por sessão; "Pular" entra direto. */
+/** Abertura do app (uma vez por sessão). */
 export default function Abertura() {
   const [mostrar, setMostrar] = useState(() => {
     let ver = true
@@ -27,7 +21,6 @@ export default function Abertura() {
     return ver
   })
   const raiz = useRef<HTMLDivElement>(null)
-  const palco = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const cancelado = useRef(false)
 
@@ -57,7 +50,6 @@ export default function Abertura() {
     }
 
     const v = video.current!
-    const espera = (ms: number) => new Promise((r) => setTimeout(r, ms))
     let liberou = false
     const aoTempo = () => {
       if (!liberou && v.duration && v.currentTime >= v.duration - LIBERAR_ANTES_DO_FIM) {
@@ -68,29 +60,10 @@ export default function Abertura() {
     }
     v.addEventListener('timeupdate', aoTempo)
 
-    // Pinta o fundo com a cor exata da borda do vídeo, como o aparelho a exibe, para não aparecer emenda
-    const igualarFundo = () => {
-      try {
-        const c = document.createElement('canvas')
-        c.width = c.height = 8
-        const g = c.getContext('2d', { willReadFrequently: true })!
-        g.drawImage(v, 0, 0, 24, 24, 0, 0, 8, 8)
-        const d = g.getImageData(0, 0, 8, 8).data
-        let r = 0, gr = 0, b = 0
-        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2] }
-        const n = d.length / 4
-        if (raiz.current) raiz.current.style.background = `rgb(${Math.round(r / n)},${Math.round(gr / n)},${Math.round(b / n)})`
-      } catch { /* sem permissão de leitura: mantém o verde padrão */ }
-    }
-    v.addEventListener('loadeddata', igualarFundo, { once: true })
 
     ;(async () => {
-      await espera(REVELACAO)
-      if (parou()) return
-      // A Lente se dissolve no primeiro quadro do vídeo (o "f" dourado sobre o verde)
-      palco.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 700, easing: 'ease-in-out', fill: 'forwards' })
-      await v.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 700, easing: 'ease-in-out', fill: 'forwards' }).finished.catch(() => {})
-      if (parou()) return
+      // Abre direto no vídeo: o "f" dourado sobre o preto vira o jato
+      v.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500, easing: 'ease-out', fill: 'forwards' })
       try {
         await v.play()
       } catch {
@@ -99,15 +72,12 @@ export default function Abertura() {
       }
     })()
 
-    return () => { vivo = false; v.removeEventListener('timeupdate', aoTempo); v.removeEventListener('loadeddata', igualarFundo) }
+    return () => { vivo = false; v.removeEventListener('timeupdate', aoTempo) }
   }, [mostrar])
 
   if (!mostrar) return null
   return (
     <div ref={raiz} className="abertura">
-      <div ref={palco} style={{ position: 'absolute', inset: 0 }}>
-        <Lente logo={LOGO_OURO} originalColors look="dark" background="#012c1b" plateColor="#0a3a27" logoColor="#e2d1a8" label="Flow" loop={false} style={{ position: 'absolute', inset: 0 }} />
-      </div>
       <video
         ref={video}
         className="abertura-video"
