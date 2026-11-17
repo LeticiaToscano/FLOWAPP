@@ -8,7 +8,7 @@ const KEY = 'flow.abertura'
       que se afasta para o fundo da tela até sumir.
    3) Quando o avião está sumindo, o fundo se abre e os cartões entram. */
 const REVELACAO = 4100 // ms até a marca ficar parada no meio
-const VIDEO_VOO: string = (import.meta.env.VITE_VIDEO_VOO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/c0fd4e90-3341-4630-aa61-d0966671918e.mp4'
+const VIDEO_VOO: string = (import.meta.env.VITE_VIDEO_VOO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/ec2166fd-7b9d-4f32-bbf0-9a649352249f.mp4'
 const LIBERAR_ANTES_DO_FIM = 0.9 // s antes do fim do vídeo em que os cartões começam a entrar
 
 /** Avisa a tela de viagens que pode abrir o leque. */
