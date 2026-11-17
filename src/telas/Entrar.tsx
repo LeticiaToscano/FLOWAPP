@@ -1,3 +1,4 @@
+import { LOGO_OURO } from '../lib/marca'
 import { useState } from 'react'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
 import { authReq, sessaoDe, setSessao } from '../lib/supabase'
@@ -36,7 +37,7 @@ export default function Entrar({ avisoInicial }: { avisoInicial: Aviso }) {
   return (
     <div className="tela">
       <div className="center">
-        <div><div className="brand">Flow</div><p className="muted">O luxo de não se preocupar.</p></div>
+        <div className="marca"><img src={LOGO_OURO} alt="" width={116} /><div className="nome" aria-label="Flow">FLOW</div><p>O luxo de não se preocupar.</p></div>
         <AvisoBox aviso={aviso} />
         {modo !== 'recuperar' ? (
           <div className="seg" role="tablist" aria-label="Acesso">

@@ -26,7 +26,7 @@ const xml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 /** Capa padrão (retrato 4:7) com a inicial da viagem. */
 export function capaPadrao(titulo: string) {
   const letra = xml((titulo || 'V').trim().charAt(0).toUpperCase())
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E2A3A"/><stop offset="1" stop-color="#0D1015"/></linearGradient></defs><rect width="640" height="1120" fill="url(#g)"/><text x="320" y="640" text-anchor="middle" font-family="system-ui,sans-serif" font-size="300" font-weight="700" fill="#E9B872">${letra}</text></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#124632"/><stop offset="1" stop-color="#012C1B"/></linearGradient></defs><rect width="640" height="1120" fill="url(#g)"/><text x="320" y="640" text-anchor="middle" font-family="system-ui,sans-serif" font-size="300" font-weight="700" fill="#E2D1A8">${letra}</text></svg>`
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 }
 

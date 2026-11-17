@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Lente } from './lente/lente'
+import { LOGO_OURO } from '../lib/marca'
 
 const KEY = 'flow.abertura'
 /* 1) A Lente faz a revelação (~3,8 s) e o "f" fica parado no meio.
@@ -7,8 +8,6 @@ const KEY = 'flow.abertura'
       que se afasta para o fundo da tela até sumir.
    3) Quando o avião está sumindo, o fundo se abre e os cartões entram. */
 const REVELACAO = 4100 // ms até a marca ficar parada no meio
-/** O símbolo em ouro 3D, recortado da logo oficial (arquivo em public/). */
-const LOGO_OURO: string = (import.meta.env.VITE_LOGO_OURO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/60e61d47-9228-4b55-bac1-4f79061597bc.png'
 const VIDEO_VOO: string = (import.meta.env.VITE_VIDEO_VOO as string | undefined) || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3Hrjdnb6LBzJK6SYxcNE6VQdZEf/c0fd4e90-3341-4630-aa61-d0966671918e.mp4'
 const LIBERAR_ANTES_DO_FIM = 0.9 // s antes do fim do vídeo em que os cartões começam a entrar
 
