@@ -68,6 +68,22 @@ export default function Abertura() {
     }
     v.addEventListener('timeupdate', aoTempo)
 
+    // Pinta o fundo com a cor exata da borda do vídeo, como o aparelho a exibe, para não aparecer emenda
+    const igualarFundo = () => {
+      try {
+        const c = document.createElement('canvas')
+        c.width = c.height = 8
+        const g = c.getContext('2d', { willReadFrequently: true })!
+        g.drawImage(v, 0, 0, 24, 24, 0, 0, 8, 8)
+        const d = g.getImageData(0, 0, 8, 8).data
+        let r = 0, gr = 0, b = 0
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2] }
+        const n = d.length / 4
+        if (raiz.current) raiz.current.style.background = `rgb(${Math.round(r / n)},${Math.round(gr / n)},${Math.round(b / n)})`
+      } catch { /* sem permissão de leitura: mantém o verde padrão */ }
+    }
+    v.addEventListener('loadeddata', igualarFundo, { once: true })
+
     ;(async () => {
       await espera(REVELACAO)
       if (parou()) return
@@ -83,7 +99,7 @@ export default function Abertura() {
       }
     })()
 
-    return () => { vivo = false; v.removeEventListener('timeupdate', aoTempo) }
+    return () => { vivo = false; v.removeEventListener('timeupdate', aoTempo); v.removeEventListener('loadeddata', igualarFundo) }
   }, [mostrar])
 
   if (!mostrar) return null
@@ -96,6 +112,7 @@ export default function Abertura() {
         ref={video}
         className="abertura-video"
         src={VIDEO_VOO}
+        crossOrigin="anonymous"
         muted
         playsInline
         preload="auto"
