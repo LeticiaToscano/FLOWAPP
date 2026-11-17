@@ -1,0 +1,500 @@
+import { Fragment, useCallback, useEffect, useState, type ChangeEvent } from 'react'
+import { AvisoBox, enviar, Icone, type Aviso } from '../components/comum'
+import { baixarArquivo, enviarArquivo, rest, userId } from '../lib/supabase'
+import { buscarCapaWikipedia } from '../lib/capa'
+import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
+import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
+import { capaDa, useCapas, type ViagemRow } from './Viagens'
+
+type Row = Record<string, any>
+type Aba = 'hoje' | 'reservas' | 'roteiro' | 'perfil'
+
+/** Abre um arquivo do cofre numa aba nova (a aba é aberta já no toque, para o navegador não bloquear). */
+async function abrirArquivo(path: string, onErro: (t: string) => void) {
+  const w = window.open('', '_blank')
+  try {
+    const url = URL.createObjectURL(await baixarArquivo(path))
+    if (w) w.location.href = url
+    else window.location.href = url
+    setTimeout(() => URL.revokeObjectURL(url), 120000)
+  } catch (e) {
+    w?.close()
+    onErro(erroPt(e))
+  }
+}
+
+function Status({ r }: { r: Row }) {
+  if (r.precisa_revisao) return <span className="chip warn">Revisar</span>
+  if (r.status_pagamento === 'pendente') return <span className="chip warn">Falta pagar</span>
+  if (r.status_pagamento === 'parcial') return <span className="chip warn">Pago em parte</span>
+  return <span className="chip ok">Pago</span>
+}
+
+export default function Viagem({ id }: { id: string }) {
+  const [viagem, setViagem] = useState<ViagemRow | null>(null)
+  const [reservas, setReservas] = useState<Row[]>([])
+  const [roteiro, setRoteiro] = useState<Row[]>([])
+  const [perfilViagem, setPerfilViagem] = useState<Row | null>(null)
+  const [perfil, setPerfil] = useState<Row | null>(null)
+  const [aba, setAba] = useState<Aba>('hoje')
+  const [resForm, setResForm] = useState<string | null>(null) // 'novo' | id
+  const [itemForm, setItemForm] = useState<string | null>(null) // 'novo' | id
+  const [historico, setHistorico] = useState<Row[]>([])
+  const [aviso, setAviso] = useState<Aviso>(null)
+  const capas = useCapas(viagem ? [viagem] : [])
+
+  const ok = (texto: string) => { setAviso({ texto }); window.scrollTo(0, 0) }
+  const erro = (texto: string) => { setAviso({ texto, erro: true }); window.scrollTo(0, 0) }
+
+  const recarregar = useCallback(async () => {
+    try {
+      const [v, res, rot, pv, pf] = await Promise.all([
+        rest<ViagemRow[]>('GET', `viagens?id=eq.${id}&select=*`),
+        rest<Row[]>('GET', `reservas?viagem_id=eq.${id}&select=*&order=inicio.asc.nullslast`),
+        rest<Row[]>('GET', `roteiro_itens?viagem_id=eq.${id}&select=*&order=dia.asc,hora.asc.nullslast,ordem.asc`),
+        rest<Row[]>('GET', 'perfil_viagem?select=*'),
+        rest<Row[]>('GET', 'perfis?select=*'),
+      ])
+      if (!v?.[0]) { window.location.hash = '#/viagens'; return }
+      setViagem(v[0]); setReservas(res || []); setRoteiro(rot || [])
+      setPerfilViagem(pv?.[0] || null); setPerfil(pf?.[0] || null)
+    } catch (e) { erro(erroPt(e)) }
+  }, [id])
+
+  useEffect(() => { recarregar() }, [recarregar])
+
+  function irPara(a: Aba) { setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
+  async function abrirReserva(rid: string) {
+    setAba('reservas'); setResForm(rid); setHistorico([]); setAviso(null); window.scrollTo(0, 0)
+    try { setHistorico(await rest<Row[]>('GET', `reserva_historico?reserva_id=eq.${rid}&select=*&order=alterado_em.desc&limit=20`) || []) } catch { /* opcional */ }
+  }
+  function novaReserva() { setAba('reservas'); setResForm('novo'); setHistorico([]); setAviso(null); window.scrollTo(0, 0) }
+
+  if (!viagem) return <div className="tela loading">Carregando…</div>
+
+  /* ---------------- Hoje ---------------- */
+  function Hoje() {
+    const agora = Date.now()
+    const prox = reservas.filter((r) => r.inicio && new Date(r.inicio).getTime() > agora - 2 * 3600e3)[0]
+    const revisar = reservas.filter((r) => r.precisa_revisao)
+    const pendentes = reservas.filter((r) => r.status_pagamento !== 'pago')
+    const cancel = reservas.filter((r) => {
+      if (!r.cancelamento_gratis_ate) return false
+      const t = new Date(r.cancelamento_gratis_ate).getTime()
+      return t > agora && t - agora < 72 * 3600e3
+    })
+    const hoje = roteiro.filter((i) => i.dia === hojeISO())
+
+    async function trocarCapa(e: ChangeEvent<HTMLInputElement>) {
+      const f = e.target.files?.[0]
+      if (!f) return
+      try {
+        if (!/^image\//.test(f.type)) throw new Error('Escolha uma imagem (JPG, PNG, HEIC ou WEBP).')
+        ok('Enviando foto…')
+        const path = await enviarArquivo(id, f, 'capa-')
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: path })
+        await recarregar(); ok('Foto da viagem atualizada.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+    async function buscarFoto() {
+      try {
+        const c = await buscarCapaWikipedia(viagem!.destino || viagem!.titulo)
+        if (!c) { erro('Não encontramos uma foto para este destino. Envie uma foto sua.'); return }
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_url: c.url, capa_credito: c.credito, capa_path: null })
+        await recarregar(); ok('Foto do destino atualizada.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+
+    return (
+      <>
+        <img className="capa-mini" src={capaDa(viagem!, capas)} alt={`Foto de ${viagem!.destino || viagem!.titulo}`} />
+        {!viagem!.capa_path && viagem!.capa_credito && <span className="credito">{viagem!.capa_credito}</span>}
+        <p className="muted">{fmtDataLonga(hojeISO())}</p>
+
+        {revisar.map((r) => (
+          <button key={'rv' + r.id} type="button" className="card alert" onClick={() => abrirReserva(r.id)}>
+            <strong>Revise: {tipoNome(r.tipo)} {r.origem || r.fornecedor || ''}</strong>
+            <span className="muted" style={{ color: '#D9CFC6' }}>Há uma informação com dúvida (data, fuso ou local). Confira antes de seguir.</span>
+          </button>
+        ))}
+        {cancel.map((r) => (
+          <button key={'cc' + r.id} type="button" className="card alert" onClick={() => abrirReserva(r.id)}>
+            <strong>Cancelamento grátis termina em breve</strong>
+            <span className="muted" style={{ color: '#D9CFC6' }}>{tipoNome(r.tipo)} {r.fornecedor || r.destino || ''} · até {fmtDiaHora(r.cancelamento_gratis_ate, r.fuso_inicio)}</span>
+          </button>
+        ))}
+
+        {prox ? (
+          <section className="card">
+            <div className="row between"><span className="eyebrow">Próximo passo</span><Status r={prox} /></div>
+            <strong style={{ fontSize: 16 }}>{tipoNome(prox.tipo)}{prox.fornecedor ? ' · ' + prox.fornecedor : ''}</strong>
+            <div className="row between" style={{ alignItems: 'flex-end' }}>
+              <div>
+                <div className="big">{fmtHora(prox.inicio, prox.fuso_inicio)}</div>
+                <div className="muted">{prox.origem || ''}</div>
+                <div className="hint">{fmtDiaHora(prox.inicio, prox.fuso_inicio)} · hora de {fusoNome(prox.fuso_inicio)}</div>
+              </div>
+              {prox.fim && (
+                <div style={{ textAlign: 'right' }}>
+                  <div className="big">{fmtHora(prox.fim, prox.fuso_fim)}</div>
+                  <div className="muted">{prox.destino || ''}</div>
+                  <div className="hint">hora de {fusoNome(prox.fuso_fim)}</div>
+                </div>
+              )}
+            </div>
+            <div className="grid2">
+              {prox.codigo_reserva && <div className="cell"><div className="k">Código da reserva</div><div className="v">{prox.codigo_reserva}</div></div>}
+              {prox.numero_bilhete && <div className="cell"><div className="k">Nº do bilhete</div><div className="v">{prox.numero_bilhete}</div></div>}
+              {prox.assentos && <div className="cell"><div className="k">Assentos</div><div className="v">{prox.assentos}</div></div>}
+              {prox.terminal && <div className="cell"><div className="k">Terminal / estação</div><div className="v">{prox.terminal}</div></div>}
+              {prox.bagagem && <div className="cell"><div className="k">Bagagem</div><div className="v">{prox.bagagem}</div></div>}
+            </div>
+            <div className="row">
+              {prox.comprovante_path && <button type="button" className="btn primary" style={{ flex: 1 }} onClick={() => abrirArquivo(prox.comprovante_path, erro)}>Abrir comprovante</button>}
+              <button type="button" className="btn" style={{ flex: 1 }} onClick={() => abrirReserva(prox.id)}>Ver detalhes</button>
+            </div>
+          </section>
+        ) : (
+          <div className="card empty">
+            <strong>Nada marcado ainda</strong>
+            <p className="muted">Adicione suas reservas para o Flow montar o seu dia.</p>
+            <button type="button" className="btn sm" onClick={novaReserva}>Adicionar reserva</button>
+          </div>
+        )}
+
+        {hoje.length > 0 && (<><h2>Hoje no roteiro</h2>{hoje.map((i) => <Fragment key={i.id}>{Item({ i })}</Fragment>)}</>)}
+        {pendentes.length > 0 && <p className="muted">{pendentes.length} reserva(s) com pagamento pendente. Veja em Reservas.</p>}
+
+        <section className="card">
+          <strong>Foto da viagem</strong>
+          <p className="hint">Aparece no seu leque de viagens. Use uma foto sua ou a do destino.</p>
+          <label>Enviar foto (até 10 MB)<input type="file" accept="image/jpeg,image/png,image/heic,image/webp" onChange={trocarCapa} /></label>
+          <button type="button" className="btn sm" onClick={buscarFoto}>Usar foto do destino</button>
+        </section>
+      </>
+    )
+  }
+
+  /* ---------------- Reservas ---------------- */
+  function Resumo() {
+    const porMoeda: Record<string, { total: number; pago: number; falta: number }> = {}
+    reservas.forEach((r) => {
+      if (r.valor == null) return
+      const m = r.moeda || 'BRL'
+      const v = Number(r.valor)
+      porMoeda[m] = porMoeda[m] || { total: 0, pago: 0, falta: 0 }
+      porMoeda[m].total += v
+      if (r.status_pagamento === 'pago') porMoeda[m].pago += v
+      else porMoeda[m].falta += v
+    })
+    return (
+      <>
+        {Object.entries(porMoeda).map(([m, s]) => (
+          <section key={m} className="card">
+            <div className="grid3">
+              <div><div className="hint">Total</div><strong>{fmtMoeda(s.total, m)}</strong></div>
+              <div><div className="hint">Pago</div><strong style={{ color: 'var(--blue)' }}>{fmtMoeda(s.pago, m)}</strong></div>
+              <div><div className="hint">Falta pagar</div><strong style={{ color: 'var(--coral)' }}>{fmtMoeda(s.falta, m)}</strong></div>
+            </div>
+          </section>
+        ))}
+      </>
+    )
+  }
+
+  function Reservas() {
+    if (resForm) return FormReserva()
+    return (
+      <>
+        {Resumo()}
+        <button type="button" className="btn primary" onClick={novaReserva}>Adicionar reserva</button>
+        {reservas.length ? reservas.map((r) => (
+          <button key={r.id} type="button" className="card" onClick={() => abrirReserva(r.id)}>
+            <div className="row between"><span className="hint">{tipoNome(r.tipo)}{r.inicio ? ' · ' + fmtDiaHora(r.inicio, r.fuso_inicio) : ''}</span><Status r={r} /></div>
+            <strong>{r.origem || r.destino ? [r.origem, r.destino].filter(Boolean).join(' → ') : r.fornecedor || tipoNome(r.tipo)}</strong>
+            {r.codigo_reserva && <span className="hint">Código {r.codigo_reserva}</span>}
+            {r.cancelamento_gratis_ate && <span className="hint" style={{ color: '#F0C88E' }}>Cancelamento grátis até {fmtDiaHora(r.cancelamento_gratis_ate, r.fuso_inicio)}</span>}
+          </button>
+        )) : <p className="muted">Nenhuma reserva ainda. Em breve você também poderá encaminhar os e-mails de confirmação para o Flow.</p>}
+      </>
+    )
+  }
+
+  const CAMPOS_HIST: Record<string, string> = { inicio: 'Saída', fim: 'Chegada', origem: 'Origem', destino: 'Destino', terminal: 'Terminal', assentos: 'Assentos', codigo_reserva: 'Código', numero_bilhete: 'Bilhete', valor: 'Valor', status_pagamento: 'Pagamento', fornecedor: 'Empresa' }
+  function Historico({ h }: { h: Row }) {
+    const mud = Object.keys(CAMPOS_HIST).filter((k) => JSON.stringify(h.antes[k]) !== JSON.stringify(h.depois[k]))
+    if (!mud.length) return null
+    const fmt = (k: string, v: any, row: Row) => (k === 'inicio' ? fmtDiaHora(v, row.fuso_inicio) : k === 'fim' ? fmtDiaHora(v, row.fuso_fim) : v ?? '—')
+    return (
+      <div className="hint" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+        <div>{new Date(h.alterado_em).toLocaleString('pt-BR')}</div>
+        {mud.map((k) => (
+          <div key={k}>{CAMPOS_HIST[k]}: <s>{String(fmt(k, h.antes[k], h.antes))}</s> → <strong style={{ color: 'var(--text)' }}>{String(fmt(k, h.depois[k], h.depois))}</strong></div>
+        ))}
+      </div>
+    )
+  }
+
+  function FormReserva() {
+    const novo = resForm === 'novo'
+    const r: Row | undefined = novo
+      ? { tipo: 'voo', fuso_inicio: 'America/Sao_Paulo', fuso_fim: 'America/Sao_Paulo', moeda: 'BRL', status_pagamento: 'pago', confirmada: true }
+      : reservas.find((x) => x.id === resForm)
+    if (!r) return null
+
+    async function salvar(fd: FormData) {
+      const fi = campo(fd, 'fuso_inicio') || 'America/Sao_Paulo'
+      const ff = campo(fd, 'fuso_fim') || fi
+      const codigo = campo(fd, 'codigo_reserva')
+      const valor = campo(fd, 'valor')
+      const body: Row = {
+        tipo: campo(fd, 'tipo'), fornecedor: campo(fd, 'fornecedor'),
+        codigo_reserva: codigo ? codigo.toUpperCase() : null, numero_bilhete: campo(fd, 'numero_bilhete'),
+        origem: campo(fd, 'origem'), destino: campo(fd, 'destino'), terminal: campo(fd, 'terminal'),
+        assentos: campo(fd, 'assentos'), bagagem: campo(fd, 'bagagem'),
+        inicio: localParaUtc(campo(fd, 'inicio'), fi), fuso_inicio: fi, fim: localParaUtc(campo(fd, 'fim'), ff), fuso_fim: ff,
+        valor: valor != null ? Number(valor) : null, moeda: campo(fd, 'moeda'),
+        status_pagamento: campo(fd, 'status_pagamento'), vence_em: campo(fd, 'vence_em'),
+        cancelamento_gratis_ate: localParaUtc(campo(fd, 'cancelamento_gratis_ate'), fi),
+        confirmada: fd.get('confirmada') === 'on',
+      }
+      if (body.inicio && body.fim && body.fim < body.inicio) throw new Error('A chegada está antes da saída. Confira as datas e os fusos.')
+      if (novo) {
+        const [criada] = await rest<Row[]>('POST', 'reservas', { ...body, viagem_id: id, fonte: 'manual' }, 'return=representation')
+        await recarregar(); setResForm(criada.id); setHistorico([])
+        ok('Reserva salva. Agora você pode anexar o comprovante.')
+      } else {
+        await rest('PATCH', `reservas?id=eq.${resForm}`, { ...body, precisa_revisao: fd.get('precisa_revisao') === 'on' })
+        setResForm(null); await recarregar(); ok('Reserva atualizada.')
+      }
+    }
+    async function apagar() {
+      if (!confirm('Apagar esta reserva? Esta ação não pode ser desfeita.')) return
+      try { await rest('DELETE', `reservas?id=eq.${r!.id}`); setResForm(null); await recarregar(); ok('Reserva apagada.') } catch (e) { erro(erroPt(e)) }
+    }
+    async function anexar(e: ChangeEvent<HTMLInputElement>) {
+      const f = e.target.files?.[0]
+      if (!f) return
+      try {
+        ok('Enviando comprovante…')
+        const path = await enviarArquivo(id, f)
+        await rest('PATCH', `reservas?id=eq.${r!.id}`, { comprovante_path: path })
+        await recarregar(); ok('Comprovante anexado.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+
+    return (
+      <form key={resForm || ''} className="stack" noValidate onSubmit={(e) => enviar(e, salvar, erro, erroPt)}>
+        <div className="row between"><h1>{novo ? 'Nova reserva' : 'Reserva'}</h1><button type="button" className="btn sm" onClick={() => setResForm(null)}>Fechar</button></div>
+        {!novo && r.precisa_revisao && <div className="flash err">Esta reserva tem informação com dúvida. Confira data, fuso e local e desmarque "Precisa de revisão".</div>}
+        <label>Tipo<select name="tipo" defaultValue={r.tipo}>{TIPOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></label>
+        <label>Empresa (companhia, hotel, operadora)<input name="fornecedor" maxLength={120} defaultValue={r.fornecedor || ''} /></label>
+        <div className="grid2">
+          <label>Código da reserva<input name="codigo_reserva" maxLength={40} defaultValue={r.codigo_reserva || ''} autoCapitalize="characters" /></label>
+          <label>Nº do bilhete<input name="numero_bilhete" maxLength={40} defaultValue={r.numero_bilhete || ''} /></label>
+        </div>
+        <div className="grid2">
+          <label>Origem<input name="origem" maxLength={120} defaultValue={r.origem || ''} /></label>
+          <label>Destino<input name="destino" maxLength={120} defaultValue={r.destino || ''} /></label>
+        </div>
+        <label>Saída / início (hora local)<input name="inicio" type="datetime-local" defaultValue={utcParaInput(r.inicio, r.fuso_inicio)} /></label>
+        <label>Fuso da saída<select name="fuso_inicio" defaultValue={r.fuso_inicio || 'America/Sao_Paulo'}>{FUSOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></label>
+        <label>Chegada / fim (hora local)<input name="fim" type="datetime-local" defaultValue={utcParaInput(r.fim, r.fuso_fim)} /></label>
+        <label>Fuso da chegada<select name="fuso_fim" defaultValue={r.fuso_fim || 'America/Sao_Paulo'}>{FUSOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></label>
+        <div className="grid2">
+          <label>Terminal / estação<input name="terminal" maxLength={80} defaultValue={r.terminal || ''} /></label>
+          <label>Assentos<input name="assentos" maxLength={80} defaultValue={r.assentos || ''} /></label>
+        </div>
+        <label>Bagagem<input name="bagagem" maxLength={120} defaultValue={r.bagagem || ''} /></label>
+        <div className="grid2">
+          <label>Valor<input name="valor" type="number" min="0" step="0.01" inputMode="decimal" defaultValue={r.valor ?? ''} /></label>
+          <label>Moeda<select name="moeda" defaultValue={r.moeda || 'BRL'}>{MOEDAS.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>
+        </div>
+        <div className="grid2">
+          <label>Pagamento<select name="status_pagamento" defaultValue={r.status_pagamento}><option value="pago">Pago</option><option value="pendente">Falta pagar</option><option value="parcial">Pago em parte</option></select></label>
+          <label>Vence em<input name="vence_em" type="date" defaultValue={r.vence_em || ''} /></label>
+        </div>
+        <label>Cancelamento grátis até (hora da saída)<input name="cancelamento_gratis_ate" type="datetime-local" defaultValue={utcParaInput(r.cancelamento_gratis_ate, r.fuso_inicio)} /></label>
+        <label className="check"><input type="checkbox" name="confirmada" defaultChecked={!!r.confirmada} /> Reserva confirmada</label>
+        {!novo && <label className="check"><input type="checkbox" name="precisa_revisao" defaultChecked={!!r.precisa_revisao} /> Precisa de revisão</label>}
+        {!novo ? (
+          <section className="card">
+            <strong>Comprovante</strong>
+            {r.comprovante_path
+              ? <button type="button" className="btn sm" onClick={() => abrirArquivo(r.comprovante_path, erro)}>Abrir comprovante</button>
+              : <span className="muted">Nenhum comprovante anexado.</span>}
+            <label>Anexar PDF ou foto (até 10 MB)<input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/webp" onChange={anexar} /></label>
+          </section>
+        ) : <p className="hint">Depois de salvar, você poderá anexar o comprovante.</p>}
+        <button className="btn primary" type="submit">{novo ? 'Salvar reserva' : 'Salvar alterações'}</button>
+        {!novo && <button type="button" className="btn danger" onClick={apagar}>Apagar reserva</button>}
+        {!novo && historico.length > 0 && (
+          <section className="card"><strong>Histórico de alterações</strong>{historico.map((h) => <Fragment key={h.id}>{Historico({ h })}</Fragment>)}</section>
+        )}
+      </form>
+    )
+  }
+
+  /* ---------------- Roteiro ---------------- */
+  function Item({ i }: { i: Row }) {
+    async function travar() {
+      try { await rest('PATCH', `roteiro_itens?id=eq.${i.id}`, { travado: !i.travado }); await recarregar() } catch (e) { erro(erroPt(e)) }
+    }
+    return (
+      <div className="card item">
+        <span className="t">{i.hora ? String(i.hora).slice(0, 5) : '—'}</span>
+        <div className="body">
+          <strong style={{ fontWeight: 500 }}>{i.titulo}</strong>
+          {i.regiao && <span className="hint">{i.regiao}</span>}
+          {i.por_que && <span className="hint">{i.por_que}</span>}
+        </div>
+        <div className="row" style={{ gap: 2 }}>
+          <button type="button" className="icon-btn" onClick={travar} aria-pressed={!!i.travado} aria-label={i.travado ? 'Destravar compromisso' : 'Travar compromisso'} style={{ color: i.travado ? 'var(--blue)' : 'var(--muted)' }}>
+            {i.travado ? <Icone.cadeado /> : <Icone.aberto />}
+          </button>
+          <button type="button" className="btn sm" onClick={() => { setAba('roteiro'); setItemForm(i.id); setAviso(null) }}>Editar</button>
+        </div>
+      </div>
+    )
+  }
+
+  function Roteiro() {
+    if (itemForm) return FormItem()
+    const dias: Record<string, Row[]> = {}
+    roteiro.forEach((i) => { (dias[i.dia] = dias[i.dia] || []).push(i) })
+    const ordem = Object.keys(dias).sort()
+    return (
+      <>
+        <button type="button" className="btn primary" onClick={() => { setItemForm('novo'); setAviso(null) }}>Adicionar ao roteiro</button>
+        <p className="hint">O cadeado protege compromissos confirmados: com ele fechado, ninguém muda o dia ou a hora sem destravar antes.</p>
+        {ordem.length ? ordem.map((d) => (
+          <div key={d} className="stack">
+            <h2 className="day">{fmtDataLonga(d)}</h2>
+            {dias[d].map((i) => <Fragment key={i.id}>{Item({ i })}</Fragment>)}
+          </div>
+        )) : <p className="muted">Seu roteiro ainda está vazio. Em breve a IA do Flow vai montar o roteiro a partir do seu perfil.</p>}
+      </>
+    )
+  }
+
+  function FormItem() {
+    const novo = itemForm === 'novo'
+    const i: Row | undefined = novo ? { dia: viagem!.inicio || hojeISO(), travado: false } : roteiro.find((x) => x.id === itemForm)
+    if (!i) return null
+    async function salvar(fd: FormData) {
+      const body = { dia: campo(fd, 'dia'), hora: campo(fd, 'hora'), titulo: campo(fd, 'titulo'), regiao: campo(fd, 'regiao'), por_que: campo(fd, 'por_que'), travado: fd.get('travado') === 'on' }
+      if (!body.dia || !body.titulo) throw new Error('Preencha o dia e o que vai fazer.')
+      // Se o item estava travado e continua travado, o banco recusa mudar dia ou hora (cadeado).
+      if (novo) await rest('POST', 'roteiro_itens', { ...body, viagem_id: id, origem: 'usuario' })
+      else await rest('PATCH', `roteiro_itens?id=eq.${itemForm}`, body)
+      setItemForm(null); await recarregar()
+    }
+    async function apagar() {
+      if (!confirm('Apagar este item do roteiro?')) return
+      try { await rest('DELETE', `roteiro_itens?id=eq.${i!.id}`); setItemForm(null); await recarregar() } catch (e) { erro(erroPt(e)) }
+    }
+    return (
+      <form key={itemForm || ''} className="stack" noValidate onSubmit={(e) => enviar(e, salvar, erro, erroPt)}>
+        <div className="row between"><h1>{novo ? 'Novo item' : 'Editar item'}</h1><button type="button" className="btn sm" onClick={() => setItemForm(null)}>Fechar</button></div>
+        {i.travado && <div className="flash ok">Compromisso travado: para mudar dia ou hora, desmarque o cadeado primeiro.</div>}
+        <div className="grid2">
+          <label>Dia<input name="dia" type="date" required defaultValue={i.dia} /></label>
+          <label>Hora<input name="hora" type="time" defaultValue={i.hora ? String(i.hora).slice(0, 5) : ''} /></label>
+        </div>
+        <label>O quê<input name="titulo" required maxLength={120} defaultValue={i.titulo || ''} /></label>
+        <label>Região / bairro<input name="regiao" maxLength={120} defaultValue={i.regiao || ''} /></label>
+        <label>Observação<textarea name="por_que" maxLength={400} defaultValue={i.por_que || ''} /></label>
+        <label className="check"><input type="checkbox" name="travado" defaultChecked={!!i.travado} /> Compromisso confirmado (cadeado)</label>
+        <button className="btn primary" type="submit">Salvar</button>
+        {!novo && <button type="button" className="btn danger" onClick={apagar}>Apagar item</button>}
+      </form>
+    )
+  }
+
+  /* ---------------- Perfil ---------------- */
+  const P_OBJ: [string, string][] = [['descansar', 'Descansar'], ['explorar', 'Explorar'], ['gastronomia', 'Gastronomia'], ['compras', 'Compras'], ['aventura', 'Aventura'], ['cultura', 'Cultura'], ['vida_noturna', 'Vida noturna']]
+  const P_RITMO: [string, string][] = [['tranquilo', 'Tranquilo'], ['equilibrado', 'Equilibrado'], ['intenso', 'Intenso']]
+  const P_HORA: [string, string][] = [['cedo', 'Começo cedo'], ['tarde', 'Prefiro começar mais tarde']]
+  const P_DESL: [string, string][] = [['a_pe', 'A pé'], ['transporte_publico', 'Transporte público'], ['carro', 'Carro'], ['taxi_app', 'Táxi ou app']]
+  const P_REST: [string, string][] = [['nenhuma', 'Nenhuma'], ['alimentacao', 'Alimentação'], ['mobilidade', 'Mobilidade'], ['altura', 'Medo de altura']]
+
+  function Pilulas({ nome, lista, marcados, multi }: { nome: string; lista: [string, string][]; marcados: string[]; multi: boolean }) {
+    return (
+      <div className="pills">
+        {lista.map(([v, n]) => (
+          <label key={v} className="pill">
+            <input type={multi ? 'checkbox' : 'radio'} name={nome} value={v} defaultChecked={marcados.includes(v)} />
+            <span>{n}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  function Perfil() {
+    const p = perfilViagem || {}
+    const f = perfil || {}
+    async function salvar(fd: FormData) {
+      await rest('POST', 'perfil_viagem?on_conflict=usuario_id', {
+        usuario_id: userId(),
+        objetivos: fd.getAll('objetivos'), ritmo: campo(fd, 'ritmo'), horario: campo(fd, 'horario'),
+        deslocamento: fd.getAll('deslocamento'), restricoes: fd.getAll('restricoes'), imperdivel: campo(fd, 'imperdivel'),
+        atualizado_em: new Date().toISOString(),
+      }, 'resolution=merge-duplicates,return=minimal')
+      const nac = (campo(fd, 'nacionalidade') || 'BR').toUpperCase().slice(0, 2)
+      await rest('PATCH', `perfis?id=eq.${userId()}`, { nacionalidade: nac, passaporte_validade: campo(fd, 'passaporte_validade') })
+      await recarregar(); ok('Perfil salvo.')
+    }
+    return (
+      <form className="stack" noValidate onSubmit={(e) => enviar(e, salvar, erro, erroPt)}>
+        <h1>Seu perfil de viagem</h1>
+        <p className="muted">Destino, datas e quem vai já vêm das suas viagens. Aqui ficam só as suas preferências.</p>
+        <fieldset><legend>O que você mais quer nas viagens?</legend>{Pilulas({ nome: 'objetivos', lista: P_OBJ, marcados: p.objetivos || [], multi: true })}</fieldset>
+        <fieldset><legend>Qual o seu ritmo?</legend>{Pilulas({ nome: 'ritmo', lista: P_RITMO, marcados: [p.ritmo], multi: false })}</fieldset>
+        <fieldset><legend>Você gosta de acordar cedo?</legend>{Pilulas({ nome: 'horario', lista: P_HORA, marcados: [p.horario], multi: false })}</fieldset>
+        <fieldset><legend>Como prefere se deslocar?</legend>{Pilulas({ nome: 'deslocamento', lista: P_DESL, marcados: p.deslocamento || [], multi: true })}</fieldset>
+        <fieldset>
+          <legend>Alguma restrição?</legend>
+          {Pilulas({ nome: 'restricoes', lista: P_REST, marcados: p.restricoes || [], multi: true })}
+          <p className="hint">Fica só no seu perfil. Não é mostrado a ninguém do grupo.</p>
+        </fieldset>
+        <label>Algo imperdível ou que você quer evitar?<textarea name="imperdivel" maxLength={500} defaultValue={p.imperdivel || ''} /></label>
+        <h2 style={{ marginTop: 8 }}>Documentos</h2>
+        <div className="grid2">
+          <label>Nacionalidade<input name="nacionalidade" maxLength={2} defaultValue={f.nacionalidade || 'BR'} autoCapitalize="characters" /></label>
+          <label>Validade do passaporte<input name="passaporte_validade" type="date" defaultValue={f.passaporte_validade || ''} /></label>
+        </div>
+        <p className="hint">O Flow guarda só a validade, nunca o número do passaporte.</p>
+        <button className="btn primary" type="submit">Salvar perfil</button>
+      </form>
+    )
+  }
+
+  const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, perfil: Perfil }[aba]
+  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['reservas', 'Reservas'], ['roteiro', 'Roteiro'], ['perfil', 'Perfil']]
+
+  return (
+    <div className="tela">
+      <header className="top">
+        <a className="icon-btn" href="#/viagens" aria-label="Voltar para minhas viagens"><Icone.voltar /></a>
+        <h1>{viagem.titulo}</h1>
+      </header>
+      <main className="main stack">
+        <AvisoBox aviso={aviso} />
+        {conteudo()}
+      </main>
+      <nav className="nav" aria-label="Navegação da viagem">
+        <div className="nav-in">
+          {abas.map(([k, n]) => {
+            const Ic = Icone[k]
+            return (
+              <button key={k} type="button" onClick={() => irPara(k)} aria-current={aba === k ? 'page' : undefined}>
+                <Ic /><span>{n}</span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+    </div>
+  )
+}
