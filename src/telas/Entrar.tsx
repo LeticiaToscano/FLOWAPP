@@ -1,17 +1,39 @@
-import { LOGO_OURO } from '../lib/marca'
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
+import { SignInPage } from '../components/ui/sign-in-page'
+import { SignUpPage } from '../components/ui/sign-up-page'
 import { authReq, sessaoDe, setSessao } from '../lib/supabase'
 import { campo, erroPt, senhaForte } from '../lib/textos'
+import { LOGO_OURO } from '../lib/marca'
 
 type Modo = 'entrar' | 'criar' | 'recuperar'
 const voltarPara = () => encodeURIComponent(window.location.origin + '/')
+
+/** Foto da coluna da direita (Unsplash, uso livre): a asa do avião vista da janela, no fim da tarde. */
+const FOTO = 'https://images.unsplash.com/photo-1507812984078-917a274065be?w=1600&q=80&auto=format&fit=crop'
+
+/** O "f" dourado e FLOW, em cima do título. */
+function Marca() {
+  return (
+    <span className="flow-sip-marca">
+      <img src={LOGO_OURO} alt="" width={56} height={57} />
+      <span>FLOW</span>
+    </span>
+  )
+}
 
 export default function Entrar({ avisoInicial }: { avisoInicial: Aviso }) {
   const [modo, setModo] = useState<Modo>('entrar')
   const [aviso, setAviso] = useState<Aviso>(avisoInicial)
   const erro = (texto: string) => setAviso({ texto, erro: true })
-  const trocar = (m: Modo) => { setModo(m); setAviso(null) }
+  const trocar = (m: Modo) => { setModo(m); setAviso(null); window.scrollTo(0, 0) }
+
+  // No login o aviso aparece embaixo, como um recado, e some sozinho
+  useEffect(() => {
+    if (!aviso || modo !== 'entrar') return
+    const t = setTimeout(() => setAviso(null), 6000)
+    return () => clearTimeout(t)
+  }, [aviso, modo])
 
   async function aoEnviar(fd: FormData) {
     const email = campo(fd, 'email')
@@ -32,35 +54,38 @@ export default function Entrar({ avisoInicial }: { avisoInicial: Aviso }) {
       setAviso({ texto: 'Se existir uma conta com este e-mail, enviamos um link para criar uma senha nova.' })
     }
   }
+  const aoSubmeter = (e: FormEvent<HTMLFormElement>) => enviar(e, aoEnviar, erro, erroPt)
 
-  const titulo = modo === 'entrar' ? 'Entrar' : modo === 'criar' ? 'Criar conta' : 'Enviar link de recuperação'
+  if (modo !== 'entrar') {
+    return (
+      <SignUpPage
+        key={modo}
+        className="flow-sip"
+        theme="dark"
+        modo={modo}
+        heroImageSrc={FOTO}
+        title={<><Marca /><span className="sip-title__light">{modo === 'criar' ? 'Criar conta' : 'Recuperar senha'}</span></>}
+        aviso={<AvisoBox aviso={aviso} />}
+        onSubmit={aoSubmeter}
+        onSignIn={() => trocar('entrar')}
+      />
+    )
+  }
+
   return (
-    <div className="tela">
-      <div className="center">
-        <div className="marca"><img src={LOGO_OURO} alt="" width={116} /><div className="nome" aria-label="Flow">FLOW</div><p>O luxo de não se preocupar.</p></div>
-        <AvisoBox aviso={aviso} />
-        {modo !== 'recuperar' ? (
-          <div className="seg" role="tablist" aria-label="Acesso">
-            <button type="button" role="tab" aria-selected={modo === 'entrar'} className={modo === 'entrar' ? 'on' : ''} onClick={() => trocar('entrar')}>Entrar</button>
-            <button type="button" role="tab" aria-selected={modo === 'criar'} className={modo === 'criar' ? 'on' : ''} onClick={() => trocar('criar')}>Criar conta</button>
-          </div>
-        ) : (
-          <>
-            <h1>Recuperar senha</h1>
-            <p className="muted">Enviaremos um link para você criar uma senha nova.</p>
-          </>
-        )}
-        <form key={modo} className="stack" noValidate onSubmit={(e) => enviar(e, aoEnviar, erro, erroPt)}>
-          <label>E-mail<input name="email" type="email" autoComplete="email" inputMode="email" required /></label>
-          {modo !== 'recuperar' && (
-            <label>Senha<input name="password" type="password" required autoComplete={modo === 'criar' ? 'new-password' : 'current-password'} /></label>
-          )}
-          {modo === 'criar' && <p className="hint">Mínimo de 10 caracteres, com maiúscula, minúscula, número e símbolo.</p>}
-          <button className="btn primary" type="submit">{titulo}</button>
-        </form>
-        {modo === 'entrar' && <button type="button" className="link" onClick={() => trocar('recuperar')}>Esqueci minha senha</button>}
-        {modo === 'recuperar' && <button type="button" className="link" onClick={() => trocar('entrar')}>Voltar para entrar</button>}
-      </div>
-    </div>
+    <>
+      <SignInPage
+        className="flow-sip"
+        theme="dark"
+        heroImageSrc={FOTO}
+        title={<><Marca /><span className="sip-title__light">Boas-vindas</span></>}
+        description="O luxo de não se preocupar. Entre e continue de onde parou."
+        onSignIn={aoSubmeter}
+        onGoogleSignIn={() => setAviso({ texto: 'O login com Google chega em breve. Por enquanto, entre com e-mail e senha.' })}
+        onResetPassword={() => trocar('recuperar')}
+        onCreateAccount={() => trocar('criar')}
+      />
+      {aviso && <div className="flow-sip-recado"><AvisoBox aviso={aviso} /></div>}
+    </>
   )
 }
