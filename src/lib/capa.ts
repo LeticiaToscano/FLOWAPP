@@ -26,11 +26,11 @@ const xml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 /** Capa padrão (retrato 4:7) com a inicial da viagem. */
 export function capaPadrao(titulo: string) {
   const letra = xml((titulo || 'V').trim().charAt(0).toUpperCase())
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#124632"/><stop offset="1" stop-color="#012C1B"/></linearGradient></defs><rect width="640" height="1120" fill="url(#g)"/><text x="320" y="640" text-anchor="middle" font-family="system-ui,sans-serif" font-size="300" font-weight="700" fill="#E2D1A8">${letra}</text></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1C1A16"/><stop offset="1" stop-color="#000000"/></linearGradient></defs><rect width="640" height="1120" fill="url(#g)"/><text x="320" y="640" text-anchor="middle" font-family="system-ui,sans-serif" font-size="300" font-weight="700" fill="#E2D1A8">${letra}</text></svg>`
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 }
 
 /** Cartão "Nova viagem" para o leque. */
 export const CARTAO_NOVA = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><rect width="640" height="1120" fill="#ffffff"/><rect x="24" y="24" width="592" height="1072" rx="64" fill="none" stroke="#0d5c46" stroke-width="4" stroke-dasharray="18 14"/><path d="M320 470v180M230 560h180" stroke="#0d5c46" stroke-width="22" stroke-linecap="round"/><text x="320" y="760" text-anchor="middle" font-family="system-ui,sans-serif" font-size="56" font-weight="600" fill="#1c1c1a">Nova viagem</text></svg>`
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 1120"><rect width="640" height="1120" fill="#0E0E0E"/><rect x="24" y="24" width="592" height="1072" rx="64" fill="none" stroke="#E2D1A8" stroke-width="4" stroke-dasharray="18 14"/><path d="M320 470v180M230 560h180" stroke="#E2D1A8" stroke-width="22" stroke-linecap="round"/><text x="320" y="760" text-anchor="middle" font-family="system-ui,sans-serif" font-size="56" font-weight="600" fill="#F4EEDF">Nova viagem</text></svg>`
 )

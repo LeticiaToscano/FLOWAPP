@@ -1,6 +1,6 @@
 :root{
-  --bg:#012C1B;--surface:#0B3A28;--surface2:#124632;--line:#1C5640;--line2:#2A6B53;
-  --text:#F4EEDF;--muted:#A9BFB3;--soft:#D3DFD7;
+  --bg:#000000;--surface:#0E0E0E;--surface2:#171717;--line:#262626;--line2:#353535;
+  --text:#F4EEDF;--muted:#A8A39A;--soft:#D6D1C7;
   --gold:#E2D1A8;--gold-ink:#16251C;--gold-soft:rgba(226,209,168,.14);
   --serif:"Didot","Bodoni 72","Bodoni MT","Playfair Display",Georgia,"Times New Roman",serif;
   --blue:#A9C7FF;--blue-soft:rgba(138,180,255,.14);
@@ -31,8 +31,8 @@ a{color:var(--gold)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:6px;color:var(--text);text-align:left;font:inherit;width:100%}
 button.card{cursor:pointer}
 button.card:hover{border-color:var(--line2)}
-.card.alert{background:#2A1D18;border-color:var(--coral-line)}
-.card.info{background:rgba(138,180,255,.06);border-color:#2E3B55}
+.card.alert{background:#1F1410;border-color:var(--coral-line)}
+.card.info{background:rgba(226,209,168,.05);border-color:#3A3428}
 .card.empty{align-items:flex-start}
 .big{font-size:26px;font-weight:600}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -85,11 +85,9 @@ s{color:var(--muted)}
 .abertura.saindo{opacity:0;pointer-events:none}
 .abertura-video{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(100vw,100vh,720px);height:min(100vw,100vh,720px);object-fit:contain;background:#000;opacity:0;pointer-events:none;z-index:1}
 .abertura-pular{position:absolute;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));min-height:44px;padding:0 18px;border-radius:999px;border:1px solid rgba(226,209,168,.35);background:rgba(0,0,0,.55);color:#e2d1a8;font:inherit;font-size:14px;cursor:pointer;z-index:2}
-.viagens{min-height:100dvh;display:flex;flex-direction:column;background:#ecebe6;color:#1c1c1a;
-  --bg:#ecebe6;--surface:#ffffff;--surface2:#f4f2ec;--line:#dcd9d0;--line2:#c9c5ba;--text:#1c1c1a;--muted:#5e5b53;--soft:#3f3d37;
-  --gold:#163f33;--gold-ink:#ffffff;--blue:#1f4f8f;--coral:#a3402a;--coral-soft:rgba(163,64,42,.1)}
-.viagens .flash.ok{background:rgba(22,63,51,.1);color:#163f33}
-.viagens .flash.err{color:#a3402a}
+.viagens{min-height:100dvh;display:flex;flex-direction:column;background:var(--bg);color:var(--text)}
+.viagens .flash.ok{background:var(--gold-soft);color:var(--gold)}
+.viagens .flash.err{color:var(--coral)}
 .viagens-topo{max-width:1100px;width:100%;margin:0 auto;display:flex;align-items:center;gap:8px;padding:16px 20px 0}
 .viagens-topo h1{flex:1}
 .viagens-leque{width:100%;max-width:1100px;margin:0 auto}

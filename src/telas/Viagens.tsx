@@ -97,7 +97,7 @@ export default function Viagens({ nova, avisoInicial }: { nova: boolean; avisoIn
 
       {carregado && liberado && !nova && (
         <div className="viagens-leque">
-          <CardFanCarousel cards={cards} theme="light" />
+          <CardFanCarousel cards={cards} theme="dark" />
         </div>
       )}
 
