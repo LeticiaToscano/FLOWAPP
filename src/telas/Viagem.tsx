@@ -20,6 +20,15 @@ const NOME_IA = 'Lia'
 
 const vozOuvindo = createSimulatedVoice(11)
 const vozFalando = createSimulatedVoice(29)
+// Saudações da Lia na tela — o áudio de cada uma tem o mesmo texto (FRASES em supabase/functions/voz-lia)
+const SAUDACOES: Record<string, { pre: string; apres: string }> = {
+  ola: { pre: 'Oi', apres: '' },
+  volta1: { pre: 'Oi de novo', apres: 'Que bom que você voltou. Em que mais posso te ajudar?' },
+  volta2: { pre: 'Olha você aqui de novo', apres: 'Pode falar, estou te ouvindo.' },
+  volta3: { pre: 'Voltou', apres: 'Ficou faltando alguma coisa da viagem? Me conta.' },
+  volta4: { pre: 'Oi', apres: 'Estou aqui de novo pra você. O que vamos resolver agora?' },
+}
+
 type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; maxAlternatives?: number; start: () => void; stop: () => void; abort?: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: ((e: any) => void) | null }
 const Reconhecimento: (new () => Reconhecedor) | undefined = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : undefined
 
@@ -67,6 +76,7 @@ export default function Viagem({ id }: { id: string }) {
   const [comVoz, setComVoz] = useState(vozLigada)
   // Modo conversa: ouve, envia sozinho quando a pessoa para de falar, a Lia responde em voz alta e volta a ouvir
   const [conversa, setConversa] = useState(false)
+  const [visita, setVisita] = useState('ola')
   const conversaRef = useRef(false)
   const textoRef = useRef('')
   const chatRef = useRef<Msg[]>([])
@@ -502,27 +512,37 @@ export default function Viagem({ id }: { id: string }) {
     }
   }
 
-  /** Ao abrir a Lia: "Oi, <nome>!…" com a voz natural (gerada no servidor uma vez por nome e guardada no aparelho).
-   *  Sem nome, ou se falhar, toca a saudação gravada geral. Na véspera, deseja boa viagem. Uma vez por sessão. */
+  /** Toda vez que a pessoa abre a Lia, ela cumprimenta em voz alta com o nome. A primeira vez do dia é a apresentação;
+   *  se voltar no mesmo dia, a saudação muda (volta1…volta4, em rodízio), como numa conversa de verdade.
+   *  O áudio de cada frase é gerado no servidor uma vez por nome e guardado no aparelho. Se falhar, toca a gravada geral. */
   async function falarOla() {
     destravarVoz()
-    try { if (sessionStorage.getItem('flow.voz.ola')) return } catch { /* segue */ }
+    const hoje = hojeISO()
+    let n = 0
+    try {
+      const v = JSON.parse(localStorage.getItem('flow.lia.visitas') || 'null')
+      n = v?.dia === hoje ? (v.n || 0) + 1 : 0
+      localStorage.setItem('flow.lia.visitas', JSON.stringify({ dia: hoje, n }))
+    } catch { /* segue */ }
+    const tipo = n === 0 ? 'ola' : `volta${((n - 1) % 4) + 1}`
+    setVisita(tipo)
+    if (!vozLigada()) return
     const amanha = new Date(Date.now() + 864e5).toISOString().slice(0, 10)
-    if (viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())) { void falar('boaViagem', true); return }
+    if (n === 0 && viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hoje)) { void falar('boaViagem'); return }
     const nome = primeiroNome()
-    if (nome && vozLigada()) {
+    if (nome) {
       try {
-        const chave = `https://flow.local/voz/ola/${encodeURIComponent(nome)}`
+        const chave = `https://flow.local/voz/${tipo}/${encodeURIComponent(nome)}`
         const cache = 'caches' in window ? await caches.open('flow-voz') : null
         let resp = await cache?.match(chave)
         if (!resp) {
-          const r = await fetch(`${SUPA_URL}/functions/v1/voz-lia`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY } })
+          const r = await fetch(`${SUPA_URL}/functions/v1/voz-lia`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo }) })
           if (r.ok && (r.headers.get('Content-Type') || '').includes('audio')) { resp = r; await cache?.put(chave, r.clone()) }
         }
-        if (resp && await tocar(URL.createObjectURL(await resp.blob()))) { try { sessionStorage.setItem('flow.voz.ola', '1') } catch { /* segue */ } return }
+        if (resp && await tocar(URL.createObjectURL(await resp.blob()))) return
       } catch { /* cai na saudação gravada */ }
     }
-    void falar('ola', true)
+    void falar('ola')
   }
   const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
 
@@ -639,7 +659,7 @@ export default function Viagem({ id }: { id: string }) {
             <VoicePoweredOrb enableVoiceControl={ouvindo || conversa} />
           </div>
           <h1 className="lia-ola">
-            Oi{nome ? ', ' : '!'}
+            {(SAUDACOES[visita] || SAUDACOES.ola).pre}{nome ? ', ' : '!'}
             {nome && (
               <>
                 <span className="lia-nome">
@@ -658,7 +678,9 @@ export default function Viagem({ id }: { id: string }) {
               <button type="submit" className="lia-pilula">Pronto</button>
             </form>
           )}
-          <p className="lia-apres">Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</p>
+          <p className="lia-apres">{visita === 'ola' || !SAUDACOES[visita]
+            ? <>Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</>
+            : SAUDACOES[visita].apres}</p>
           {caixa}
           {sugestoes}
           <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes. Nada muda na viagem sem o seu sim.</p>

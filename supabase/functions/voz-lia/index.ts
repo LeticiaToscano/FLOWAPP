@@ -1,19 +1,30 @@
 // Flow — saudação falada da Lia com o nome da pessoa (Supabase Edge Function "voz-lia")
 //
-// Gera "Oi, <nome>! Que bom te ver por aqui. Eu sou a Lia…" com a voz natural da ElevenLabs e devolve o MP3.
+// Gera a saudação da Lia com o nome da pessoa (voz natural da ElevenLabs) e devolve o MP3.
+// O app escolhe QUAL saudação ("ola" na primeira vez do dia, "volta1"…"volta4" quando a pessoa volta no mesmo dia),
+// mas o texto de cada uma é fixo aqui no servidor.
 // Cada nome é gerado UMA vez e guardado no cofre privado "vozes" (pasta da própria pessoa); das próximas vezes
 // a função só devolve o arquivo guardado, sem gastar créditos.
 //
 // Segurança:
 // - A chave da ElevenLabs fica só nos segredos ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID.
-// - O texto NÃO vem do app: a função monta a frase com o nome salvo no perfil da pessoa logada. Ninguém consegue
+// - O texto NÃO vem do app: o app só escolhe uma das frases fixas abaixo, e o nome vem do perfil da pessoa logada. Ninguém consegue
 //   usar a função para gerar outros áudios com a sua conta.
-// - Limite de 5 gerações novas por pessoa a cada 24 h.
+// - Limite de 10 gerações novas por pessoa a cada 24 h (cada frase só é gerada uma vez por nome).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const ORIGENS = ['https://flowapp-virid.vercel.app', 'http://localhost:5173']
-const LIMITE_DIA = 5
+const LIMITE_DIA = 10
+
+// Frases fixas — {n} vira o primeiro nome. Devem bater com o texto mostrado na tela (SAUDACOES em Viagem.tsx).
+const FRASES: Record<string, string> = {
+  ola: 'Oi, {n}! Que bom te ver por aqui. Eu sou a Lia, sua concierge. Como posso te ajudar na sua viagem?',
+  volta1: 'Oi de novo, {n}! Que bom que você voltou. Em que mais posso te ajudar?',
+  volta2: 'Olha você aqui de novo, {n}! Pode falar, estou te ouvindo.',
+  volta3: 'Voltou, {n}! Ficou faltando alguma coisa da viagem? Me conta.',
+  volta4: 'Oi, {n}! Estou aqui de novo pra você. O que vamos resolver agora?',
+}
 
 function cors(origem: string | null) {
   return {
@@ -62,7 +73,9 @@ Deno.serve(async (req) => {
   const nome = limparNome(perfil?.nome)
   if (!nome) return erro('Sem nome no perfil.', 400)
 
-  const frase = `Oi, ${nome}! Que bom te ver por aqui. Eu sou a Lia, sua concierge. Como posso te ajudar na sua viagem?`
+  let tipo = 'ola'
+  try { const b = await req.json(); if (typeof b?.tipo === 'string' && b.tipo in FRASES) tipo = b.tipo } catch { /* sem corpo: ola */ }
+  const frase = FRASES[tipo].replace('{n}', nome)
   const caminho = `${eu}/ola-${await resumo(voz + frase)}.mp3`
 
   // Já gerado antes? Devolve o guardado.
