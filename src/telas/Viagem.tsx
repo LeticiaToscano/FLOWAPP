@@ -1,14 +1,22 @@
-import { Fragment, useCallback, useEffect, useState, type ChangeEvent } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { AvisoBox, enviar, Icone, type Aviso } from '../components/comum'
 import { baixarArquivo, enviarArquivo, getToken, rest, SUPA_KEY, SUPA_URL, userId } from '../lib/supabase'
 import { buscarCapaWikipedia } from '../lib/capa'
 import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
 import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
 import { capaDa, useCapas, type ViagemRow } from './Viagens'
+import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components/ui/handoff-beam'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
 type Msg = { papel: 'eu' | 'assistente'; texto: string }
+
+// Feixe de luz do Assistente: paleta dourada do Flow (centro, borda, pensando, borda ouvindo, borda falando)
+const FEIXE_OURO = ['#F6EDD6', '#C4A872', '#FFF4DA', '#E2D1A8', '#D9C391']
+const vozOuvindo = createSimulatedVoice(11)
+const vozFalando = createSimulatedVoice(29)
+type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
+const Reconhecimento: (new () => Reconhecedor) | undefined = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : undefined
 
 /** Abre um arquivo do cofre numa aba nova (a aba é aberta já no toque, para o navegador não bloquear). */
 async function abrirArquivo(path: string, onErro: (t: string) => void) {
@@ -48,6 +56,12 @@ export default function Viagem({ id }: { id: string }) {
   const [docsResumo, setDocsResumo] = useState('')
   const [chat, setChat] = useState<Msg[]>([])
   const [chatCarregando, setChatCarregando] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [digitando, setDigitando] = useState(false)
+  const [ouvindo, setOuvindo] = useState(false)
+  const [falando, setFalando] = useState(false)
+  const reconhecedor = useRef<Reconhecedor | null>(null)
+  useEffect(() => () => reconhecedor.current?.stop(), [])
   const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
   const capas = useCapas(viagem ? [viagem] : [])
 
@@ -439,16 +453,31 @@ export default function Viagem({ id }: { id: string }) {
     const t = texto.trim()
     if (!t || chatCarregando) return
     const nova: Msg[] = [...chat, { papel: 'eu', texto: t }]
-    setChat(nova); setChatCarregando(true); setAviso(null)
+    reconhecedor.current?.stop()
+    setChat(nova); setTexto(''); setChatCarregando(true); setAviso(null)
     try {
       const d = await chamarIA<{ resposta: string }>('assistente-ia', { viagem_id: id, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
       setChat([...nova, { papel: 'assistente', texto: d.resposta }])
+      setFalando(true); setTimeout(() => setFalando(false), 2600)
     } catch (e) {
       setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : 'O assistente não respondeu agora.' }])
     } finally {
       setChatCarregando(false)
       setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
+  }
+
+  function ouvir() {
+    if (!Reconhecimento) return
+    if (ouvindo) { reconhecedor.current?.stop(); return }
+    const r = new Reconhecimento()
+    r.lang = 'pt-BR'; r.interimResults = true; r.continuous = false
+    r.onresult = (e) => setTexto(Array.from(e.results as ArrayLike<any>).map((x) => x[0].transcript).join(''))
+    r.onend = () => { setOuvindo(false); reconhecedor.current = null }
+    r.onerror = () => { setOuvindo(false); reconhecedor.current = null }
+    reconhecedor.current = r
+    setOuvindo(true)
+    try { r.start() } catch { setOuvindo(false) }
   }
 
   function Assistente() {
@@ -470,11 +499,30 @@ export default function Viagem({ id }: { id: string }) {
             <button key={s} type="button" className="chip-btn" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
           ))}
         </div>
-        <form className="chat-form" onSubmit={(e) => { e.preventDefault(); const f = e.currentTarget; const v = (f.elements.namedItem('pergunta') as HTMLInputElement).value; f.reset(); perguntar(v) }}>
-          <label htmlFor="pergunta" className="sr-only">Pergunte sobre a viagem</label>
-          <input id="pergunta" name="pergunta" placeholder="Pergunte sobre a viagem" autoComplete="off" maxLength={500} />
-          <button type="submit" className="enviar" aria-label="Enviar pergunta" disabled={chatCarregando}><Icone.enviar /></button>
-        </form>
+        <HandoffBeam
+          phase={(chatCarregando ? 'thinking' : falando ? 'speaking' : ouvindo || (digitando && texto) ? 'listening' : 'idle') as BeamPhase}
+          level={falando ? vozFalando : ouvindo ? vozOuvindo : texto ? 0.35 : 0}
+          palette={FEIXE_OURO}
+          tone="dark"
+          phaseLabels={{ idle: 'Pronto', listening: 'Ouvindo', thinking: 'Pensando', speaking: 'Respondendo' }}
+          className="composer-beam"
+        >
+          <form className="composer" onSubmit={(e) => { e.preventDefault(); perguntar(texto) }}>
+            <label htmlFor="pergunta" className="sr-only">Pergunte sobre a viagem</label>
+            <input
+              id="pergunta" name="pergunta" placeholder={ouvindo ? 'Pode falar…' : 'Pergunte sobre a viagem'} autoComplete="off" maxLength={500}
+              value={texto} onChange={(e) => setTexto(e.target.value)} onFocus={() => setDigitando(true)} onBlur={() => setDigitando(false)}
+            />
+            {Reconhecimento && (
+              <button type="button" className={'composer-btn' + (ouvindo ? ' ativo' : '')} onClick={ouvir} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+              </button>
+            )}
+            <button type="submit" className="composer-btn enviar" aria-label="Enviar pergunta" disabled={chatCarregando || !texto.trim()}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            </button>
+          </form>
+        </HandoffBeam>
         <p className="hint">O assistente só responde: nada muda na viagem sem o seu sim.</p>
       </div>
     )
