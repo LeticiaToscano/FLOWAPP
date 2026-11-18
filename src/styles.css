@@ -175,3 +175,42 @@ s{color:var(--muted)}
 /* sugestões: rolagem lateral sem a barra branca */
 .chips{scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
+
+/* ============ Mobile e web ============ */
+
+/* Mobile: respeita o entalhe do iPhone e evita o zoom automático do iOS (campos com 16px) */
+.top{padding-top:calc(14px + env(safe-area-inset-top))}
+@media (max-width:899px){
+  input,select,textarea,.composer input{font-size:16px}
+  .main{padding-bottom:calc(110px + env(safe-area-inset-bottom))}
+  /* Conversa com a Lia: sugestões e barra de mensagem ficam presas acima do menu */
+  .chat-doca{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:4;display:flex;flex-direction:column;gap:10px;padding-top:12px;background:linear-gradient(to bottom,transparent,var(--bg) 22%)}
+}
+@media (max-width:380px){
+  .nav button{font-size:10px}
+  .main{padding-left:16px;padding-right:16px}
+}
+
+/* Web (telas largas): menu lateral fixo e conteúdo mais largo */
+@media (min-width:900px){
+  .tela{max-width:none;padding-left:248px}
+  .top,.main{width:100%;max-width:860px;margin:0 auto;box-sizing:border-box}
+  .top{padding:28px 32px 8px}
+  .top h1{font-size:22px}
+  .main{padding:16px 32px 64px}
+  .nav{top:0;right:auto;bottom:0;width:248px;border-top:0;border-right:1px solid var(--line);padding:28px 16px;display:flex;flex-direction:column}
+  .nav::before{content:"FLOW";display:block;padding:0 14px 28px;font-size:15px;font-weight:400;letter-spacing:.5em;color:var(--gold)}
+  .nav-in{display:flex;flex-direction:column;gap:4px;max-width:none;margin:0}
+  .nav button{flex-direction:row;justify-content:flex-start;gap:12px;min-height:44px;padding:0 14px;border-radius:12px;font-size:14px;font-weight:500}
+  .nav button:hover{background:var(--surface);color:var(--text)}
+  .nav button[aria-current="page"]{background:rgba(226,209,168,.08)}
+  .lista-docs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .capa-mini{aspect-ratio:21/8;max-height:320px}
+  .chat{min-height:calc(100dvh - 140px)}
+  .chat-msgs{flex:1}
+  .msg{max-width:70%;font-size:15px}
+  .chat-doca{position:sticky;bottom:0;display:flex;flex-direction:column;gap:12px;padding:16px 0 24px;background:linear-gradient(to bottom,transparent,var(--bg) 18%)}
+}
+@media (min-width:1280px){
+  .top,.main{max-width:960px}
+}

@@ -11,6 +11,9 @@ type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
 type Msg = { papel: 'eu' | 'assistente'; texto: string }
 
+/** Nome da concierge de IA do Flow (aparece na aba, no chat e nas respostas). */
+const NOME_IA = 'Lia'
+
 const vozOuvindo = createSimulatedVoice(11)
 const vozFalando = createSimulatedVoice(29)
 type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
@@ -457,7 +460,7 @@ export default function Viagem({ id }: { id: string }) {
       setChat([...nova, { papel: 'assistente', texto: d.resposta }])
       setFalando(true); setTimeout(() => setFalando(false), 2600)
     } catch (e) {
-      setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : 'O assistente não respondeu agora.' }])
+      setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : `A ${NOME_IA} não respondeu agora.` }])
     } finally {
       setChatCarregando(false)
       setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView({ behavior: 'smooth' }), 50)
@@ -482,15 +485,16 @@ export default function Viagem({ id }: { id: string }) {
     return (
       <div className="chat">
         <div>
-          <h1>Assistente</h1>
-          <p className="muted">Conhece suas reservas, seu roteiro e seus documentos</p>
+          <h1>{NOME_IA}</h1>
+          <p className="muted">Sua concierge de viagem · conhece suas reservas, seu roteiro e seus documentos</p>
         </div>
         <div className="chat-msgs" aria-live="polite">
-          {!chat.length && <div className="msg dela">Olá! Pergunte o que quiser sobre esta viagem: horários, bilhetes, endereços, o que fazer amanhã.</div>}
+          {!chat.length && <div className="msg dela">Oi, eu sou a {NOME_IA}, sua concierge no Flow. Pergunte o que quiser sobre esta viagem: horários, bilhetes, endereços, o que fazer amanhã.</div>}
           {chat.map((m, n) => <div key={n} className={'msg ' + (m.papel === 'eu' ? 'minha' : 'dela')}>{m.texto}</div>)}
-          {chatCarregando && <div className="msg dela digitando" aria-label="Respondendo">•••</div>}
+          {chatCarregando && <div className="msg dela digitando" aria-label={`${NOME_IA} está respondendo`}>•••</div>}
           <div className="chat-fim" />
         </div>
+        <div className="chat-doca">
         <div className="chips">
           {SUGESTOES.filter((s) => !usadas.has(s)).map((s) => (
             <button key={s} type="button" className="chip-btn" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
@@ -520,7 +524,8 @@ export default function Viagem({ id }: { id: string }) {
             </button>
           </form>
         </HandoffBeam>
-        <p className="hint">O assistente só responde: nada muda na viagem sem o seu sim.</p>
+        <p className="hint">A {NOME_IA} só responde: nada muda na viagem sem o seu sim.</p>
+        </div>
       </div>
     )
   }
@@ -707,7 +712,7 @@ export default function Viagem({ id }: { id: string }) {
   }
 
   const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, documentos: Documentos, assistente: Assistente, perfil: Perfil }[aba]
-  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', 'Assistente']]
+  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA]]
 
   return (
     <div className="tela">

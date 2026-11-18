@@ -1,4 +1,4 @@
-// Flow — Assistente da viagem (Supabase Edge Function "assistente-ia")
+// Flow — Lia, a concierge de IA da viagem (Supabase Edge Function "assistente-ia")
 //
 // Responde perguntas sobre UMA viagem usando as reservas, o roteiro e o checklist de documentos da pessoa.
 // Só responde: não altera nada. Mudanças continuam passando pelo app, com o "sim" da pessoa.
@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   const chave = Deno.env.get('ANTHROPIC_API_KEY')
   if (!chave) return responder({ erro: 'A IA ainda não foi configurada.' }, 500)
   const auth = req.headers.get('Authorization') || ''
-  if (!auth.startsWith('Bearer ')) return responder({ erro: 'Entre na sua conta para usar o assistente.' }, 401)
+  if (!auth.startsWith('Bearer ')) return responder({ erro: 'Entre na sua conta para falar com a Lia.' }, 401)
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: auth } }, auth: { persistSession: false },
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
   const agora = new Date().toISOString()
   const sistema = [
-    'Você é o Assistente do Flow, um app de viagem premium. Responda em português do Brasil, curto e direto, como um concierge atencioso.',
+    'Você é a Lia, a concierge de viagem do Flow, um app de viagem premium. Fale em português do Brasil, no feminino, de forma calorosa, curta e direta, como uma concierge atenciosa. Não diga que é um modelo de IA a menos que perguntem; se perguntarem, diga que é a assistente de IA do Flow.',
     'Use SOMENTE os dados da viagem abaixo para fatos da viagem (horários, códigos, endereços, assentos). Se a informação não estiver nos dados, diga que não encontrou e sugira onde conferir. Nunca invente horários, códigos ou portões.',
     'Horários das reservas estão em UTC (campos inicio/fim) e o fuso de cada trecho está nos campos que começam com "fuso". Sempre informe o horário LOCAL do lugar, deixando claro qual fuso, e avise quando chegar "+1 dia".',
     'Para dicas gerais (deslocamento, bairros, costumes) você pode usar seu conhecimento, deixando claro que é sugestão e que vale confirmar.',
@@ -105,6 +105,6 @@ Deno.serve(async (req) => {
     if (!texto) throw new Error('vazio')
     return responder({ resposta: texto.slice(0, 4000) })
   } catch {
-    return responder({ erro: 'O assistente não respondeu agora. Tente de novo em instantes.' }, 502)
+    return responder({ erro: 'A Lia não respondeu agora. Tente de novo em instantes.' }, 502)
   }
 })
