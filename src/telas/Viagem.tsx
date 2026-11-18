@@ -9,6 +9,7 @@ import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
+import { MenuDock, type AbaDock } from '../components/menu-dock'
 import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
@@ -1012,7 +1013,7 @@ export default function Viagem({ id }: { id: string }) {
   }
 
   const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, documentos: Documentos, assistente: Assistente, perfil: Perfil }[aba]
-  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA]]
+  const abas: [AbaDock, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA]]
 
   return (
     <div className="tela">
@@ -1025,18 +1026,7 @@ export default function Viagem({ id }: { id: string }) {
         <AvisoBox aviso={aviso} />
         {conteudo()}
       </main>
-      <nav className="nav" aria-label="Navegação da viagem">
-        <div className="nav-in">
-          {abas.map(([k, n]) => {
-            const Ic = Icone[k]
-            return (
-              <button key={k} type="button" onClick={() => irPara(k)} aria-current={aba === k ? 'page' : undefined}>
-                <Ic /><span>{n}</span>
-              </button>
-            )
-          })}
-        </div>
-      </nav>
+      <MenuDock abas={abas} atual={aba} aoEscolher={irPara} />
     </div>
   )
 }
