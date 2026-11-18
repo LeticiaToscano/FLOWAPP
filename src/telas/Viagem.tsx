@@ -9,7 +9,7 @@ import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
-import { destravarVoz, falar, ligarVoz, tocar, vozLigada } from '../lib/voz'
+import { destravarVoz, falar, ligarVoz, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
@@ -96,7 +96,7 @@ export default function Viagem({ id }: { id: string }) {
 
   useEffect(() => { recarregar() }, [recarregar])
 
-  function irPara(a: Aba) { if (a === 'assistente' && aba !== 'assistente') void falarOla(); setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
+  function irPara(a: Aba) { if (a === 'assistente' && aba !== 'assistente') falarOla(); setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
   async function abrirReserva(rid: string) {
     setAba('reservas'); setResForm(rid); setHistorico([]); setAviso(null); window.scrollTo(0, 0)
     try { setHistorico(await rest<Row[]>('GET', `reserva_historico?reserva_id=eq.${rid}&select=*&order=alterado_em.desc&limit=20`) || []) } catch { /* opcional */ }
@@ -482,27 +482,12 @@ export default function Viagem({ id }: { id: string }) {
     }
   }
 
-  /** Ao abrir a Lia: "Oi, <nome>!…" com a voz natural (gerada no servidor uma vez por nome e guardada no aparelho).
-   *  Sem nome, ou se a voz com nome falhar, toca a saudação gravada geral. Na véspera, deseja boa viagem. Uma vez por sessão. */
-  async function falarOla() {
+  /** Ao abrir a Lia: saudação gravada com voz natural (na véspera, "boa viagem"), uma vez por sessão. O nome aparece escrito. */
+  function falarOla() {
     destravarVoz()
-    try { if (sessionStorage.getItem('flow.voz.ola')) return } catch { /* segue */ }
     const amanha = new Date(Date.now() + 864e5).toISOString().slice(0, 10)
-    if (viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())) { void falar('boaViagem', true); return }
-    const nome = primeiroNome()
-    if (nome && vozLigada()) {
-      try {
-        const chave = `https://flow.local/voz/ola/${encodeURIComponent(nome)}`
-        const cache = 'caches' in window ? await caches.open('flow-voz') : null
-        let resp = await cache?.match(chave)
-        if (!resp) {
-          const r = await fetch(`${SUPA_URL}/functions/v1/voz-lia`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY } })
-          if (r.ok && (r.headers.get('Content-Type') || '').includes('audio')) { resp = r; await cache?.put(chave, r.clone()) }
-        }
-        if (resp && await tocar(URL.createObjectURL(await resp.blob()))) { try { sessionStorage.setItem('flow.voz.ola', '1') } catch { /* segue */ } return }
-      } catch { /* cai na saudação gravada */ }
-    }
-    void falar('ola', true)
+    const vespera = !!viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())
+    void falar(vespera ? 'boaViagem' : 'ola', true)
   }
   const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
 
