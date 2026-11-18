@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { AvisoBox, enviar, Icone, type Aviso } from '../components/comum'
-import { baixarArquivo, enviarArquivo, rest, userId } from '../lib/supabase'
+import { baixarArquivo, enviarArquivo, getToken, rest, SUPA_KEY, SUPA_URL, userId } from '../lib/supabase'
 import { buscarCapaWikipedia } from '../lib/capa'
 import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
 import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
@@ -41,6 +41,8 @@ export default function Viagem({ id }: { id: string }) {
   const [itemForm, setItemForm] = useState<string | null>(null) // 'novo' | id
   const [historico, setHistorico] = useState<Row[]>([])
   const [aviso, setAviso] = useState<Aviso>(null)
+  // Proposta de roteiro da IA: só vira roteiro quando a pessoa confirma
+  const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
   const capas = useCapas(viagem ? [viagem] : [])
 
   const ok = (texto: string) => { setAviso({ texto }); window.scrollTo(0, 0) }
@@ -358,21 +360,90 @@ export default function Viagem({ id }: { id: string }) {
     )
   }
 
+  async function pedirRoteiroIA() {
+    setAviso(null)
+    setIa({ carregando: true })
+    try {
+      const r = await fetch(`${SUPA_URL}/functions/v1/roteiro-ia`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viagem_id: id }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d?.erro || 'A IA não respondeu agora. Tente de novo em instantes.')
+      if (!d.itens?.length) throw new Error('A IA não encontrou nada novo para sugerir. Tente de novo mais tarde.')
+      setIa({ carregando: false, resumo: d.resumo, itens: d.itens })
+    } catch (e) {
+      setIa(null)
+      erro(e instanceof Error ? e.message : erroPt(e))
+    }
+  }
+
+  async function aplicarRoteiroIA() {
+    if (!ia?.itens) return
+    try {
+      // Troca só as sugestões antigas da IA que não foram travadas; o que a pessoa criou e os travados ficam
+      await rest('DELETE', `roteiro_itens?viagem_id=eq.${id}&origem=eq.ia&travado=eq.false`)
+      await rest('POST', 'roteiro_itens', ia.itens.map((i) => ({ viagem_id: id, origem: 'ia', travado: false, dia: i.dia, hora: i.hora, titulo: i.titulo, regiao: i.regiao, por_que: i.por_que })), 'return=minimal')
+      setIa(null)
+      await recarregar()
+      ok('Roteiro aplicado. Trave os compromissos que você confirmar.')
+    } catch (e) { erro(erroPt(e)) }
+  }
+
+  function PropostaIA() {
+    if (!ia) return null
+    if (ia.carregando) return <div className="card ia-card"><strong>Montando seu roteiro…</strong><span className="hint">A IA está cruzando seu perfil, as reservas e os compromissos travados. Leva uns 30 segundos.</span></div>
+    const dias: Record<string, Row[]> = {}
+    ;(ia.itens || []).forEach((i) => { (dias[i.dia] = dias[i.dia] || []).push(i) })
+    const antigas = roteiro.filter((i) => i.origem === 'ia' && !i.travado).length
+    return (
+      <div className="stack ia-proposta">
+        <div className="card ia-card">
+          <strong>Proposta da IA</strong>
+          {ia.resumo && <span>{ia.resumo}</span>}
+          <span className="hint">
+            {(ia.itens || []).length} sugestões em {Object.keys(dias).length} dias.
+            {antigas ? ` Vai substituir ${antigas} sugestões antigas da IA.` : ''} Seus itens e os travados não mudam.
+          </span>
+          <div className="row">
+            <button type="button" className="btn primary" onClick={aplicarRoteiroIA}>Aplicar ao roteiro</button>
+            <button type="button" className="btn" onClick={() => setIa(null)}>Descartar</button>
+          </div>
+        </div>
+        {Object.keys(dias).sort().map((d) => (
+          <div key={d} className="stack">
+            <h2 className="day">{fmtDataLonga(d)}</h2>
+            {dias[d].map((i, n) => (
+              <div key={n} className="card">
+                <strong>{i.hora ? `${String(i.hora).slice(0, 5)} · ` : ''}{i.titulo}</strong>
+                {i.regiao && <span className="muted">{i.regiao}</span>}
+                {i.por_que && <span className="hint">{i.por_que}</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   function Roteiro() {
     if (itemForm) return FormItem()
+    if (ia) return PropostaIA()
     const dias: Record<string, Row[]> = {}
     roteiro.forEach((i) => { (dias[i.dia] = dias[i.dia] || []).push(i) })
     const ordem = Object.keys(dias).sort()
     return (
       <>
-        <button type="button" className="btn primary" onClick={() => { setItemForm('novo'); setAviso(null) }}>Adicionar ao roteiro</button>
+        <button type="button" className="btn primary" onClick={pedirRoteiroIA}>Montar roteiro com IA</button>
+        <button type="button" className="btn" onClick={() => { setItemForm('novo'); setAviso(null) }}>Adicionar item</button>
         <p className="hint">O cadeado protege compromissos confirmados: com ele fechado, ninguém muda o dia ou a hora sem destravar antes.</p>
         {ordem.length ? ordem.map((d) => (
           <div key={d} className="stack">
             <h2 className="day">{fmtDataLonga(d)}</h2>
             {dias[d].map((i) => <Fragment key={i.id}>{Item({ i })}</Fragment>)}
           </div>
-        )) : <p className="muted">Seu roteiro ainda está vazio. Em breve a IA do Flow vai montar o roteiro a partir do seu perfil.</p>}
+        )) : <p className="muted">Seu roteiro ainda está vazio. Toque em "Montar roteiro com IA" e ela monta os dias a partir do seu perfil e das suas reservas.</p>}
       </>
     )
   }

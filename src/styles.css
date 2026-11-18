@@ -129,3 +129,7 @@ s{color:var(--muted)}
 /* CAPTCHA (Turnstile): só aparece quando o Cloudflare pede uma confirmação */
 .flow-captcha{position:fixed;left:50%;bottom:90px;translate:-50% 0;z-index:21}
 .flow-captcha:empty{display:none}
+
+/* Proposta de roteiro da IA */
+.ia-card{border-color:rgba(226,209,168,.35);background:linear-gradient(180deg,rgba(226,209,168,.08),rgba(226,209,168,.02))}
+.ia-card strong{color:var(--gold)}
