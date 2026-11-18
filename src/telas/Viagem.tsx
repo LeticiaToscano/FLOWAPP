@@ -7,7 +7,8 @@ import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, 
 import { capaDa, useCapas, type ViagemRow } from './Viagens'
 
 type Row = Record<string, any>
-type Aba = 'hoje' | 'reservas' | 'roteiro' | 'perfil'
+type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
+type Msg = { papel: 'eu' | 'assistente'; texto: string }
 
 /** Abre um arquivo do cofre numa aba nova (a aba é aberta já no toque, para o navegador não bloquear). */
 async function abrirArquivo(path: string, onErro: (t: string) => void) {
@@ -42,6 +43,11 @@ export default function Viagem({ id }: { id: string }) {
   const [historico, setHistorico] = useState<Row[]>([])
   const [aviso, setAviso] = useState<Aviso>(null)
   // Proposta de roteiro da IA: só vira roteiro quando a pessoa confirma
+  const [docs, setDocs] = useState<Row[]>([])
+  const [docsCarregando, setDocsCarregando] = useState(false)
+  const [docsResumo, setDocsResumo] = useState('')
+  const [chat, setChat] = useState<Msg[]>([])
+  const [chatCarregando, setChatCarregando] = useState(false)
   const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
   const capas = useCapas(viagem ? [viagem] : [])
 
@@ -50,16 +56,17 @@ export default function Viagem({ id }: { id: string }) {
 
   const recarregar = useCallback(async () => {
     try {
-      const [v, res, rot, pv, pf] = await Promise.all([
+      const [v, res, rot, pv, pf, dc] = await Promise.all([
         rest<ViagemRow[]>('GET', `viagens?id=eq.${id}&select=*`),
         rest<Row[]>('GET', `reservas?viagem_id=eq.${id}&select=*&order=inicio.asc.nullslast`),
         rest<Row[]>('GET', `roteiro_itens?viagem_id=eq.${id}&select=*&order=dia.asc,hora.asc.nullslast,ordem.asc`),
         rest<Row[]>('GET', 'perfil_viagem?select=*'),
         rest<Row[]>('GET', 'perfis?select=*'),
+        rest<Row[]>('GET', `documentos_checklist?viagem_id=eq.${id}&viajante_id=eq.${userId()}&select=*&order=criado_em.asc`),
       ])
       if (!v?.[0]) { window.location.hash = '#/viagens'; return }
       setViagem(v[0]); setReservas(res || []); setRoteiro(rot || [])
-      setPerfilViagem(pv?.[0] || null); setPerfil(pf?.[0] || null)
+      setPerfilViagem(pv?.[0] || null); setPerfil(pf?.[0] || null); setDocs(dc || [])
     } catch (e) { erro(erroPt(e)) }
   }, [id])
 
@@ -360,6 +367,119 @@ export default function Viagem({ id }: { id: string }) {
     )
   }
 
+
+  /** Chama uma função de IA do servidor com o login da pessoa. */
+  async function chamarIA<T>(funcao: string, corpo: unknown): Promise<T> {
+    const r = await fetch(`${SUPA_URL}/functions/v1/${funcao}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(d?.erro || 'A IA não respondeu agora. Tente de novo em instantes.')
+    return d as T
+  }
+
+  async function verificarDocumentos() {
+    setAviso(null); setDocsCarregando(true)
+    try {
+      const d = await chamarIA<{ resumo: string; itens: Row[] }>('documentos-ia', { viagem_id: id })
+      setDocs(d.itens || []); setDocsResumo(d.resumo || '')
+    } catch (e) { erro(e instanceof Error ? e.message : erroPt(e)) } finally { setDocsCarregando(false) }
+  }
+
+  const STATUS_DOC: Record<string, [string, string]> = { em_dia: ['Em dia', 'chip ok'], atencao: ['Atenção', 'chip warn'], pendente: ['Pendente', 'chip pend'] }
+
+  function Documentos() {
+    const atencao = docs.filter((d) => d.status !== 'em_dia').length
+    const verificado = docs.find((d) => d.verificado_em)?.verificado_em
+    return (
+      <>
+        <div>
+          <h1>Documentos</h1>
+          <p className="muted">{viagem!.destino || 'Defina o destino da viagem'}{viagem!.tipo ? ` · ${viagem!.tipo === 'nacional' ? 'nacional' : 'internacional'}` : ''}</p>
+        </div>
+        {docsCarregando ? (
+          <div className="card ia-card"><strong>Verificando nas fontes oficiais…</strong><span className="hint">A IA consulta Itamaraty, consulados e órgãos de saúde. Leva até 1 minuto.</span></div>
+        ) : docs.length ? (
+          <>
+            <p className="soft">{docsResumo || (atencao ? `Tudo pronto, com ${atencao} ${atencao === 1 ? 'ponto' : 'pontos'} de atenção.` : 'Tudo pronto para viajar.')}</p>
+            <ul className="lista-docs">
+              {docs.map((d) => {
+                const [rot, cls] = STATUS_DOC[d.status] || STATUS_DOC.pendente
+                return (
+                  <li key={d.id} className="card">
+                    <div className="row between"><strong>{d.item}</strong><span className={cls}>{rot}</span></div>
+                    {d.detalhe && <span className="soft">{d.detalhe}</span>}
+                    <span className="hint">
+                      Fonte: {d.fonte_url ? <a href={d.fonte_url} target="_blank" rel="noopener noreferrer">{d.fonte_nome || 'site oficial'}</a> : (d.fonte_nome || '—')}
+                      {d.verificado_em ? ` · verificado em ${new Date(d.verificado_em + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+            <button type="button" className="btn" onClick={verificarDocumentos}>Verificar de novo</button>
+          </>
+        ) : (
+          <div className="card">
+            <strong>Confira o que você precisa para entrar no destino</strong>
+            <span className="soft">Passaporte, visto ou autorização eletrônica, conexões, seguro, vacinas e comprovantes, com a fonte oficial de cada item.</span>
+            <button type="button" className="btn primary" onClick={verificarDocumentos}>Verificar meus documentos</button>
+          </div>
+        )}
+        <p className="hint">As regras de entrada mudam. Confirme sempre no site oficial antes de viajar. Guardamos só a nacionalidade e a validade do passaporte, nunca o número. {!perfil?.passaporte_validade && viagem!.tipo !== 'nacional' ? 'Informe a validade do passaporte no Perfil para uma conferência completa.' : ''}</p>
+      </>
+    )
+  }
+
+  const SUGESTOES = ['Que dia e que horas eu chego?', 'Onde está meu bilhete?', 'O que tenho amanhã?', 'Deixa amanhã mais leve']
+
+  async function perguntar(texto: string) {
+    const t = texto.trim()
+    if (!t || chatCarregando) return
+    const nova: Msg[] = [...chat, { papel: 'eu', texto: t }]
+    setChat(nova); setChatCarregando(true); setAviso(null)
+    try {
+      const d = await chamarIA<{ resposta: string }>('assistente-ia', { viagem_id: id, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
+      setChat([...nova, { papel: 'assistente', texto: d.resposta }])
+    } catch (e) {
+      setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : 'O assistente não respondeu agora.' }])
+    } finally {
+      setChatCarregando(false)
+      setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
+  }
+
+  function Assistente() {
+    const usadas = new Set(chat.filter((m) => m.papel === 'eu').map((m) => m.texto))
+    return (
+      <div className="chat">
+        <div>
+          <h1>Assistente</h1>
+          <p className="muted">Conhece suas reservas, seu roteiro e seus documentos</p>
+        </div>
+        <div className="chat-msgs" aria-live="polite">
+          {!chat.length && <div className="msg dela">Olá! Pergunte o que quiser sobre esta viagem: horários, bilhetes, endereços, o que fazer amanhã.</div>}
+          {chat.map((m, n) => <div key={n} className={'msg ' + (m.papel === 'eu' ? 'minha' : 'dela')}>{m.texto}</div>)}
+          {chatCarregando && <div className="msg dela digitando" aria-label="Respondendo">•••</div>}
+          <div className="chat-fim" />
+        </div>
+        <div className="chips">
+          {SUGESTOES.filter((s) => !usadas.has(s)).map((s) => (
+            <button key={s} type="button" className="chip-btn" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
+          ))}
+        </div>
+        <form className="chat-form" onSubmit={(e) => { e.preventDefault(); const f = e.currentTarget; const v = (f.elements.namedItem('pergunta') as HTMLInputElement).value; f.reset(); perguntar(v) }}>
+          <label htmlFor="pergunta" className="sr-only">Pergunte sobre a viagem</label>
+          <input id="pergunta" name="pergunta" placeholder="Pergunte sobre a viagem" autoComplete="off" maxLength={500} />
+          <button type="submit" className="enviar" aria-label="Enviar pergunta" disabled={chatCarregando}><Icone.enviar /></button>
+        </form>
+        <p className="hint">O assistente só responde: nada muda na viagem sem o seu sim.</p>
+      </div>
+    )
+  }
+
   async function pedirRoteiroIA() {
     setAviso(null)
     setIa({ carregando: true })
@@ -541,14 +661,15 @@ export default function Viagem({ id }: { id: string }) {
     )
   }
 
-  const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, perfil: Perfil }[aba]
-  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['reservas', 'Reservas'], ['roteiro', 'Roteiro'], ['perfil', 'Perfil']]
+  const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, documentos: Documentos, assistente: Assistente, perfil: Perfil }[aba]
+  const abas: [Aba, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', 'Assistente']]
 
   return (
     <div className="tela">
       <header className="top">
         <a className="icon-btn" href="#/viagens" aria-label="Voltar para minhas viagens"><Icone.voltar /></a>
         <h1>{viagem.titulo}</h1>
+        <button type="button" className="icon-btn topo-perfil" onClick={() => irPara('perfil')} aria-label="Seu perfil de viagem" aria-current={aba === 'perfil' ? 'page' : undefined}><Icone.perfil /></button>
       </header>
       <main className="main stack">
         <AvisoBox aviso={aviso} />

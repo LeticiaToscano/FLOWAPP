@@ -23,6 +23,9 @@ export const Icone = {
   reservas: () => svg(<><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M15 6v12" /></>),
   roteiro: () => svg(<><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z" /><path d="M9 4v14M15 6v14" /></>),
   perfil: () => svg(<><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></>),
+  documentos: () => svg(<><path d="M6 3h9l4 4v14H6z" /><path d="M14 3v5h5M9 13h7M9 17h5" /></>),
+  assistente: () => svg(<path d="M4 5h16v11H9l-5 4z" />),
+  enviar: () => svg(<path d="M4 12l16-8-6 16-2-7z" />, 20),
   cadeado: () => svg(<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>, 16),
   aberto: () => svg(<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 7.5-2" /></>, 16),
 }
