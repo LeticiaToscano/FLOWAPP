@@ -9,6 +9,7 @@ import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
+import { destravarVoz, falar, ligarVoz, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
@@ -63,6 +64,7 @@ export default function Viagem({ id }: { id: string }) {
   const [texto, setTexto] = useState('')
   const [ouvindo, setOuvindo] = useState(false)
   const [falando, setFalando] = useState(false)
+  const [comVoz, setComVoz] = useState(vozLigada)
   const reconhecedor = useRef<Reconhecedor | null>(null)
   useEffect(() => () => reconhecedor.current?.stop(), [])
   const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
@@ -403,10 +405,12 @@ export default function Viagem({ id }: { id: string }) {
   }
 
   async function verificarDocumentos() {
+    destravarVoz()
     setAviso(null); setDocsCarregando(true)
     try {
       const d = await chamarIA<{ resumo: string; itens: Row[] }>('documentos-ia', { viagem_id: id })
       setDocs(d.itens || []); setDocsResumo(d.resumo || '')
+      void falar('documentos')
     } catch (e) { erro(e instanceof Error ? e.message : erroPt(e)) } finally { setDocsCarregando(false) }
   }
 
@@ -463,6 +467,8 @@ export default function Viagem({ id }: { id: string }) {
     const nova: Msg[] = [...chat, { papel: 'eu', texto: t }]
     reconhecedor.current?.stop()
     setChat(nova); setTexto(''); setChatCarregando(true); setAviso(null)
+    destravarVoz()
+    const avisoDemora = window.setTimeout(() => { void falar('pensando', true) }, 1800)
     try {
       const d = await chamarIA<{ resposta: string }>('assistente-ia', { viagem_id: id, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
       setChat([...nova, { papel: 'assistente', texto: d.resposta }])
@@ -470,24 +476,18 @@ export default function Viagem({ id }: { id: string }) {
     } catch (e) {
       setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : `A ${NOME_IA} não respondeu agora.` }])
     } finally {
+      window.clearTimeout(avisoDemora)
       setChatCarregando(false)
       setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }
 
-  /** A Lia diz "Oi, Nome!" em voz alta ao abrir a aba (uma vez por sessão, com a voz em português do aparelho). */
+  /** Ao abrir a Lia: ela cumprimenta com a voz gravada (ou deseja boa viagem na véspera), uma vez por sessão. */
   function falarOla() {
-    try {
-      if (!('speechSynthesis' in window) || sessionStorage.getItem('flow.lia.ola')) return
-      const nome = primeiroNome()
-      const fala = new SpeechSynthesisUtterance(nome ? `Oi, ${nome}! Eu sou a ${NOME_IA}. Como posso te ajudar?` : `Oi! Eu sou a ${NOME_IA}. Como posso te ajudar?`)
-      fala.lang = 'pt-BR'; fala.rate = 1; fala.pitch = 1.05
-      const vozes = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('pt'))
-      fala.voice = vozes.find((v) => /luciana|francisca|thalita|vit[oó]ria|female|feminina/i.test(v.name)) || vozes.find((v) => v.lang === 'pt-BR') || vozes[0] || null
-      window.speechSynthesis.cancel()
-      window.speechSynthesis.speak(fala)
-      sessionStorage.setItem('flow.lia.ola', '1')
-    } catch { /* sem voz no aparelho: fica só o texto */ }
+    destravarVoz()
+    const amanha = new Date(Date.now() + 864e5).toISOString().slice(0, 10)
+    const vespera = !!viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())
+    void falar(vespera ? 'boaViagem' : 'ola', true)
   }
   const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
 
@@ -558,6 +558,11 @@ export default function Viagem({ id }: { id: string }) {
     if (vazia) {
       return (
         <div className="lia lia-boas-vindas">
+          <button type="button" className="lia-voz" onClick={() => { const v = !comVoz; ligarVoz(v); setComVoz(v); if (v) { destravarVoz(); void falar('ola') } }} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
+            {comVoz
+              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
+              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
+          </button>
           <div className="lia-orbe" aria-hidden="true">
             <VoicePoweredOrb enableVoiceControl={ouvindo} />
           </div>
@@ -597,6 +602,11 @@ export default function Viagem({ id }: { id: string }) {
             <h1>{NOME_IA}</h1>
             <p className="muted">Sua concierge de viagem</p>
           </div>
+          <button type="button" className="lia-voz" onClick={() => { const v = !comVoz; ligarVoz(v); setComVoz(v); if (v) { destravarVoz(); void falar('ola') } }} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
+            {comVoz
+              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
+              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
+          </button>
         </div>
         <div className="chat-msgs" aria-live="polite">
           {chat.map((m, n) =>
@@ -622,6 +632,7 @@ export default function Viagem({ id }: { id: string }) {
 
 
   async function pedirRoteiroIA() {
+    destravarVoz()
     setAviso(null)
     setIa({ carregando: true })
     try {
@@ -634,6 +645,7 @@ export default function Viagem({ id }: { id: string }) {
       if (!r.ok) throw new Error(d?.erro || 'A IA não respondeu agora. Tente de novo em instantes.')
       if (!d.itens?.length) throw new Error('A IA não encontrou nada novo para sugerir. Tente de novo mais tarde.')
       setIa({ carregando: false, resumo: d.resumo, itens: d.itens })
+      void falar('roteiro')
     } catch (e) {
       setIa(null)
       erro(e instanceof Error ? e.message : erroPt(e))
