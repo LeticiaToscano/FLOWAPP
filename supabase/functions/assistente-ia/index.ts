@@ -5,6 +5,10 @@
 //
 // Segurança: chave da Anthropic só no segredo ANTHROPIC_API_KEY; leitura com o login da pessoa (RLS);
 // limite de 60 perguntas por pessoa a cada 24 h; valores pagos e arquivos de comprovante não vão para a IA.
+//
+// Modo conversa (voz: true): a função também transforma a PRÓPRIA resposta em áudio com a voz natural da ElevenLabs
+// (segredos ELEVENLABS_API_KEY e ELEVENLABS_VOICE_ID). O texto falado nunca vem do app, então ninguém usa a sua conta
+// de voz para gerar outros áudios. Limite de 40 respostas faladas por pessoa a cada 24 h.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -45,7 +49,7 @@ Deno.serve(async (req) => {
   if (!quem?.user) return responder({ erro: 'Sessão expirada. Entre de novo.' }, 401)
   const eu = quem.user.id
 
-  let corpo: { viagem_id?: unknown; mensagens?: unknown } = {}
+  let corpo: { viagem_id?: unknown; mensagens?: unknown; voz?: unknown } = {}
   try { corpo = await req.json() } catch { /* corpo inválido */ }
   const viagemId = String(corpo.viagem_id || '')
   if (!UUID.test(viagemId)) return responder({ erro: 'Viagem inválida.' }, 400)
@@ -93,17 +97,43 @@ Deno.serve(async (req) => {
     JSON.stringify({ viagem, reservas: agenda, roteiro: roteiro || [], documentos: docs || [], perfil: perfil || null }),
   ].join('\n')
 
+  const falada = corpo.voz === true && !!Deno.env.get('ELEVENLABS_API_KEY') && !!Deno.env.get('ELEVENLABS_VOICE_ID')
+  const sistemaFinal = falada
+    ? sistema + '\nESTA RESPOSTA SERÁ FALADA EM VOZ ALTA: responda em no máximo 3 frases curtas, sem listas, sem emojis, sem markdown, escrevendo horários como se fala (ex.: "sete e quarenta e um da manhã").'
+    : sistema
+
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: MODELO, max_tokens: 900, system: sistema, messages: conversa }),
+      body: JSON.stringify({ model: MODELO, max_tokens: 900, system: sistemaFinal, messages: conversa }),
     })
     if (!r.ok) { console.error('anthropic', r.status, (await r.text()).slice(0, 500)); throw new Error('ia') }
     const d = await r.json()
     const texto = (d?.content || []).filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text).join('\n').trim()
     if (!texto) throw new Error('vazio')
-    return responder({ resposta: texto.slice(0, 4000) })
+    const resposta = texto.slice(0, 4000)
+    if (!falada) return responder({ resposta })
+
+    // Voz: limite próprio e só a resposta que a IA acabou de dar (até 700 caracteres)
+    const { count: falas } = await db.from('uso_ia').select('id', { count: 'exact', head: true }).eq('tipo', 'voz_resposta').gte('criado_em', desde)
+    if ((falas ?? 0) >= 40) return responder({ resposta, aviso_voz: 'Limite de respostas faladas do dia atingido.' })
+    await db.from('uso_ia').insert({ viagem_id: viagemId, tipo: 'voz_resposta' })
+    const falar = resposta.replace(/[*_#`>]/g, '').slice(0, 700)
+    try {
+      const v = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(Deno.env.get('ELEVENLABS_VOICE_ID')!)}?output_format=mp3_44100_64`, {
+        method: 'POST',
+        headers: { 'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY')!, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+        body: JSON.stringify({ text: falar, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.25, use_speaker_boost: true } }),
+      })
+      if (!v.ok) { console.error('elevenlabs', v.status, (await v.text()).slice(0, 300)); return responder({ resposta }) }
+      const bytes = new Uint8Array(await v.arrayBuffer())
+      let bin = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      return responder({ resposta, audio: btoa(bin) })
+    } catch {
+      return responder({ resposta })
+    }
   } catch {
     return responder({ erro: 'A Lia não respondeu agora. Tente de novo em instantes.' }, 502)
   }

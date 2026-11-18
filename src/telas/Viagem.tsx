@@ -9,7 +9,7 @@ import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
-import { destravarVoz, falar, ligarVoz, vozLigada } from '../lib/voz'
+import { calar, destravarVoz, falar, ligarVoz, tocar, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
@@ -65,6 +65,11 @@ export default function Viagem({ id }: { id: string }) {
   const [ouvindo, setOuvindo] = useState(false)
   const [falando, setFalando] = useState(false)
   const [comVoz, setComVoz] = useState(vozLigada)
+  // Modo conversa: ouve, envia sozinho quando a pessoa para de falar, a Lia responde em voz alta e volta a ouvir
+  const [conversa, setConversa] = useState(false)
+  const conversaRef = useRef(false)
+  const textoRef = useRef('')
+  useEffect(() => { textoRef.current = texto }, [texto])
   const reconhecedor = useRef<Reconhecedor | null>(null)
   useEffect(() => () => reconhecedor.current?.stop(), [])
   const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
@@ -96,7 +101,7 @@ export default function Viagem({ id }: { id: string }) {
 
   useEffect(() => { recarregar() }, [recarregar])
 
-  function irPara(a: Aba) { if (a === 'assistente' && aba !== 'assistente') falarOla(); setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
+  function irPara(a: Aba) { if (a === 'assistente' && aba !== 'assistente') void falarOla(); if (a !== 'assistente') pararConversa(); setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
   async function abrirReserva(rid: string) {
     setAba('reservas'); setResForm(rid); setHistorico([]); setAviso(null); window.scrollTo(0, 0)
     try { setHistorico(await rest<Row[]>('GET', `reserva_historico?reserva_id=eq.${rid}&select=*&order=alterado_em.desc&limit=20`) || []) } catch { /* opcional */ }
@@ -461,18 +466,25 @@ export default function Viagem({ id }: { id: string }) {
 
   const SUGESTOES = ['Que dia e que horas eu chego?', 'Onde está meu bilhete?', 'O que tenho amanhã?', 'Deixa amanhã mais leve']
 
-  async function perguntar(texto: string) {
+  async function perguntar(texto: string, voz = false) {
     const t = texto.trim()
     if (!t || chatCarregando) return
     const nova: Msg[] = [...chat, { papel: 'eu', texto: t }]
     reconhecedor.current?.stop()
     setChat(nova); setTexto(''); setChatCarregando(true); setAviso(null)
     destravarVoz()
-    const avisoDemora = window.setTimeout(() => { void falar('pensando', true) }, 1800)
+    const avisoDemora = window.setTimeout(() => { if (!voz) void falar('pensando', true) }, 1800)
     try {
-      const d = await chamarIA<{ resposta: string }>('assistente-ia', { viagem_id: id, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
+      const d = await chamarIA<{ resposta: string; audio?: string }>('assistente-ia', { viagem_id: id, voz, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
       setChat([...nova, { papel: 'assistente', texto: d.resposta }])
-      setFalando(true); setTimeout(() => setFalando(false), 2600)
+      if (voz && d.audio) {
+        setFalando(true)
+        const tocou = await tocar('data:audio/mpeg;base64,' + d.audio, () => { setFalando(false); if (conversaRef.current) ouvir(true) })
+        if (!tocou) { setFalando(false); if (conversaRef.current) ouvir(true) }
+      } else {
+        setFalando(true); setTimeout(() => setFalando(false), 2600)
+        if (voz && conversaRef.current) setTimeout(() => ouvir(true), 400)
+      }
     } catch (e) {
       setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : `A ${NOME_IA} não respondeu agora.` }])
     } finally {
@@ -482,12 +494,27 @@ export default function Viagem({ id }: { id: string }) {
     }
   }
 
-  /** Ao abrir a Lia: saudação gravada com voz natural (na véspera, "boa viagem"), uma vez por sessão. O nome aparece escrito. */
-  function falarOla() {
+  /** Ao abrir a Lia: "Oi, <nome>!…" com a voz natural (gerada no servidor uma vez por nome e guardada no aparelho).
+   *  Sem nome, ou se falhar, toca a saudação gravada geral. Na véspera, deseja boa viagem. Uma vez por sessão. */
+  async function falarOla() {
     destravarVoz()
+    try { if (sessionStorage.getItem('flow.voz.ola')) return } catch { /* segue */ }
     const amanha = new Date(Date.now() + 864e5).toISOString().slice(0, 10)
-    const vespera = !!viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())
-    void falar(vespera ? 'boaViagem' : 'ola', true)
+    if (viagem?.inicio && (viagem.inicio === amanha || viagem.inicio === hojeISO())) { void falar('boaViagem', true); return }
+    const nome = primeiroNome()
+    if (nome && vozLigada()) {
+      try {
+        const chave = `https://flow.local/voz/ola/${encodeURIComponent(nome)}`
+        const cache = 'caches' in window ? await caches.open('flow-voz') : null
+        let resp = await cache?.match(chave)
+        if (!resp) {
+          const r = await fetch(`${SUPA_URL}/functions/v1/voz-lia`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY } })
+          if (r.ok && (r.headers.get('Content-Type') || '').includes('audio')) { resp = r; await cache?.put(chave, r.clone()) }
+        }
+        if (resp && await tocar(URL.createObjectURL(await resp.blob()))) { try { sessionStorage.setItem('flow.voz.ola', '1') } catch { /* segue */ } return }
+      } catch { /* cai na saudação gravada */ }
+    }
+    void falar('ola', true)
   }
   const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
 
@@ -498,15 +525,33 @@ export default function Viagem({ id }: { id: string }) {
     setPerfil((p) => ({ ...(p || {}), nome }))
   }
 
-  function ouvir() {
+  function pararConversa() {
+    conversaRef.current = false; setConversa(false); calar(); reconhecedor.current?.stop()
+  }
+  function alternarConversa() {
+    if (conversaRef.current) { pararConversa(); return }
+    destravarVoz()
+    if (!vozLigada()) { ligarVoz(true); setComVoz(true) }
+    conversaRef.current = true; setConversa(true); setTexto('')
+    ouvir(true)
+  }
+
+  function ouvir(forcar = false) {
     if (!Reconhecimento) return
-    if (ouvindo) { reconhecedor.current?.stop(); return }
+    if (ouvindo && !forcar) { reconhecedor.current?.stop(); return }
+    reconhecedor.current?.stop()
     const r = new Reconhecimento()
     r.lang = 'pt-BR'; r.interimResults = true; r.continuous = false
     r.onresult = (e) => setTexto(Array.from(e.results as ArrayLike<any>).map((x) => x[0].transcript).join(''))
-    r.onend = () => { setOuvindo(false); reconhecedor.current = null }
-    r.onerror = () => { setOuvindo(false); reconhecedor.current = null }
+    r.onend = () => {
+      setOuvindo(false); reconhecedor.current = null
+      // No modo conversa, quando a pessoa para de falar a pergunta vai sozinha
+      if (conversaRef.current && textoRef.current.trim()) void perguntar(textoRef.current, true)
+    }
+    r.onerror = () => { setOuvindo(false); reconhecedor.current = null; if (conversaRef.current) pararConversa() }
     reconhecedor.current = r
+    calar()
+    setTexto('')
     setOuvindo(true)
     try { r.start() } catch { setOuvindo(false) }
   }
@@ -520,9 +565,15 @@ export default function Viagem({ id }: { id: string }) {
     const vazia = !chat.length
 
     const microfone = Reconhecimento ? (
-      <button type="button" className={'cci-ferr' + (ouvindo ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); ouvir() }} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
+      <>
+      <button type="button" className={'cci-ferr' + (ouvindo && !conversa ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); if (!conversa) ouvir() }} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg>
       </button>
+      <button type="button" className={'cci-ferr cci-conversa' + (conversa ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); alternarConversa() }} aria-pressed={conversa} aria-label={conversa ? 'Encerrar conversa por voz' : 'Conversar por voz com a Lia'}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 10v3" /><path d="M6 6v11" /><path d="M10 3v18" /><path d="M14 8v7" /><path d="M18 5v13" /><path d="M22 10v3" /></svg>
+        <span>{conversa ? 'Encerrar' : 'Conversar'}</span>
+      </button>
+      </>
     ) : null
 
     const caixa = (
@@ -541,7 +592,7 @@ export default function Viagem({ id }: { id: string }) {
           onChange={setTexto}
           onSend={() => perguntar(texto)}
           disabled={chatCarregando}
-          placeholder={ouvindo ? 'Pode falar, estou ouvindo…' : `Como posso ajudar na sua viagem${destino}?`}
+          placeholder={conversa ? (chatCarregando ? 'Pensando…' : falando ? 'Falando…' : 'Pode falar, estou ouvindo…') : ouvindo ? 'Pode falar, estou ouvindo…' : `Como posso ajudar na sua viagem${destino}?`}
           ferramentas={microfone}
         />
       </HandoffBeam>
@@ -564,7 +615,7 @@ export default function Viagem({ id }: { id: string }) {
               : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
           </button>
           <div className="lia-orbe" aria-hidden="true">
-            <VoicePoweredOrb enableVoiceControl={ouvindo} />
+            <VoicePoweredOrb enableVoiceControl={ouvindo || conversa} />
           </div>
           <h1 className="lia-ola">
             Oi{nome ? ', ' : '!'}
@@ -597,7 +648,7 @@ export default function Viagem({ id }: { id: string }) {
     return (
       <div className="lia lia-conversa">
         <div className="lia-topo">
-          <div className="lia-orbe-mini" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={ouvindo} /></div>
+          <div className="lia-orbe-mini" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={ouvindo || conversa} /></div>
           <div>
             <h1>{NOME_IA}</h1>
             <p className="muted">Sua concierge de viagem</p>
