@@ -125,3 +125,7 @@ s{color:var(--muted)}
 .flow-sip input{min-height:0}
 .flow-sip label{display:flex;flex-direction:row;gap:12px;font-size:14px;color:inherit}
 .flow-sip label.sip-label{display:block;color:var(--sip-muted);font-weight:500}
+
+/* CAPTCHA (Turnstile): só aparece quando o Cloudflare pede uma confirmação */
+.flow-captcha{position:fixed;left:50%;bottom:90px;translate:-50% 0;z-index:21}
+.flow-captcha:empty{display:none}
