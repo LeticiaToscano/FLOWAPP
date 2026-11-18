@@ -214,3 +214,65 @@ s{color:var(--muted)}
 @media (min-width:1280px){
   .top,.main{max-width:960px}
 }
+
+/* ============ Lia: boas-vindas, bola, caixa estilo Claude ============ */
+.lia{display:flex;flex-direction:column;gap:14px}
+.lia-boas-vindas{align-items:center;text-align:center;padding-top:8px;min-height:calc(100dvh - 210px);justify-content:center}
+.lia-orbe{width:180px;height:180px;animation:lia-chega .9s cubic-bezier(.22,1,.36,1) both}
+.lia-ola{font-family:"Source Serif 4","Iowan Old Style",Georgia,serif;font-weight:300;font-size:32px;letter-spacing:-.01em;line-height:1.2;color:#E1E1E0;margin:6px 0 0;animation:lia-chega .8s .15s cubic-bezier(.22,1,.36,1) both}
+.lia-nome{position:relative;display:inline-block;padding-bottom:8px}
+.lia-traco{position:absolute;width:140%;height:20px;bottom:-4px;left:-5%;color:#D97757}
+.lia-traco path{stroke-dasharray:140;stroke-dashoffset:140;animation:lia-traco .9s .7s ease-out forwards}
+.lia-apres{color:#B4B4B4;font-size:15px;line-height:1.5;max-width:460px;margin:0 0 6px;animation:lia-chega .8s .3s cubic-bezier(.22,1,.36,1) both}
+.lia-boas-vindas .composer-beam,.lia-boas-vindas .lia-sugestoes,.lia-boas-vindas .lia-aviso{animation:lia-chega .8s .45s cubic-bezier(.22,1,.36,1) both}
+.lia-sugestoes{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:672px;margin:0 auto}
+.lia-pilula{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;font:inherit;font-size:14px;color:#B4B4B4;background:transparent;border:1px solid rgba(69,69,64,.6);border-radius:999px;cursor:pointer;transition:background-color .15s,color .15s}
+.lia-pilula:hover{background:#30302E;color:#E1E1E0}
+.lia-pilula:disabled{opacity:.5;cursor:default}
+.lia-aviso{font-size:12px;color:#6B6B65;margin:0;text-align:center}
+.lia-topo{display:flex;align-items:center;gap:12px}
+.lia-orbe-mini{width:44px;height:44px;flex:none}
+.lia-conversa .lia-sugestoes{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}
+.lia-conversa .lia-sugestoes::-webkit-scrollbar{display:none}
+.lia-conversa .lia-pilula{flex:none}
+/* resposta aparece palavra por palavra (como no MorphOrb) */
+.lia-palavra{display:inline;animation:lia-palavra .32s cubic-bezier(.22,1,.36,1) both}
+@keyframes lia-palavra{from{opacity:0;filter:blur(4px)}to{opacity:1;filter:none}}
+@keyframes lia-chega{from{opacity:0;transform:translateY(8px) scale(.98);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes lia-traco{to{stroke-dashoffset:0}}
+/* bola de pontos pensando */
+.orbe-pensando{align-self:flex-start;display:flex;align-items:center;gap:10px;padding:4px 0}
+.orbe-rotulo{font-size:14px;color:#B4B4B4;animation:lia-chega .35s ease-out both}
+.orbe-pontos{display:inline-flex;gap:3px;margin-left:4px}
+.orbe-pontos i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:orbe-ponto 1.2s infinite}
+.orbe-pontos i:nth-child(2){animation-delay:.15s}.orbe-pontos i:nth-child(3){animation-delay:.3s}
+@keyframes orbe-ponto{0%,80%,100%{opacity:.25}40%{opacity:1}}
+/* caixa de mensagem no estilo do Claude (cores do tema escuro do componente) */
+.lia .composer-beam{width:min(672px,100%);margin:0 auto;box-shadow:0 0 15px rgba(0,0,0,.08)}
+.cci{width:100%}
+.cci-card{display:flex;flex-direction:column;border-radius:18px;background:#30302E;cursor:text;box-shadow:0 0 15px rgba(0,0,0,.08);transition:box-shadow .2s}
+.cci-card:hover{box-shadow:0 0 20px rgba(0,0,0,.12)}
+.cci-card:focus-within{box-shadow:0 0 25px rgba(0,0,0,.15)}
+.cci-in{display:flex;flex-direction:column;gap:8px;padding:12px 12px 8px}
+.cci-area{max-height:384px;overflow-y:auto;min-height:2.5rem;padding-left:4px;text-align:left}
+.cci-area textarea{display:block;width:100%;min-height:1.5em;border:0;outline:none;background:transparent;resize:none;overflow:hidden;padding:0;border-radius:0;font:inherit;font-size:16px;line-height:1.625;color:#ECECEC;box-shadow:none}
+.cci-area textarea::placeholder{color:#8A8A88}
+.cci-area textarea:focus{outline:none}
+.cci-barra{display:flex;align-items:center;gap:8px;width:100%}
+.cci-esq{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
+.cci-ferr{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#8A8A88;cursor:pointer;padding:0;transition:color .2s,background-color .2s}
+.cci-ferr:hover{color:#E1E1E0;background:#454540}
+.cci-ferr.ativo{color:#D2996E;background:rgba(210,153,110,.12)}
+.cci-enviar{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:12px;background:#D2996E;color:#212121;cursor:pointer;padding:0;box-shadow:0 4px 6px -1px rgba(0,0,0,.1);transition:background-color .15s,transform .1s}
+.cci-enviar:hover{background:#E5AA7F}
+.cci-enviar:active{transform:scale(.95)}
+.cci-enviar:disabled{background:rgba(210,153,110,.3);color:rgba(33,33,33,.6);box-shadow:none;cursor:default}
+@media (max-width:899px){
+  .lia-orbe{width:150px;height:150px}
+  .lia-ola{font-size:28px}
+  .lia-boas-vindas{min-height:calc(100dvh - 230px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .lia-orbe,.lia-ola,.lia-apres,.lia-boas-vindas .composer-beam,.lia-boas-vindas .lia-sugestoes,.lia-boas-vindas .lia-aviso,.lia-palavra,.orbe-rotulo{animation:none}
+  .lia-traco path{animation:none;stroke-dashoffset:0}
+}

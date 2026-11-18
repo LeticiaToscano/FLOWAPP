@@ -6,6 +6,9 @@ import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
 import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
 import { capaDa, useCapas, type ViagemRow } from './Viagens'
 import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components/ui/handoff-beam'
+import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
+import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
+import { OrbePensando } from '../components/ui/orbe-pensando'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
@@ -482,53 +485,105 @@ export default function Viagem({ id }: { id: string }) {
 
   function Assistente() {
     const usadas = new Set(chat.filter((m) => m.papel === 'eu').map((m) => m.texto))
+    const h = new Date().getHours()
+    const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'
+    const nome = String(perfil?.nome || '').trim().split(/\s+/)[0]
+    const destino = viagem?.destino ? ` para ${viagem.destino}` : ''
+    const vazia = !chat.length
+
+    const microfone = Reconhecimento ? (
+      <button type="button" className={'cci-ferr' + (ouvindo ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); ouvir() }} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg>
+      </button>
+    ) : null
+
+    const caixa = (
+      <HandoffBeam
+        phase={(chatCarregando ? 'thinking' : falando ? 'speaking' : 'listening') as BeamPhase}
+        level={falando ? vozFalando : vozOuvindo}
+        palette="ember"
+        tone="dark"
+        radius={18}
+        reach={22}
+        phaseLabels={{ idle: 'Pronto', listening: 'Ouvindo', thinking: 'Pensando', speaking: 'Respondendo' }}
+        className="composer-beam"
+      >
+        <ClaudeChatInput
+          value={texto}
+          onChange={setTexto}
+          onSend={() => perguntar(texto)}
+          disabled={chatCarregando}
+          placeholder={ouvindo ? 'Pode falar, estou ouvindo…' : `Como posso ajudar na sua viagem${destino}?`}
+          ferramentas={microfone}
+        />
+      </HandoffBeam>
+    )
+
+    const sugestoes = (
+      <div className="lia-sugestoes">
+        {SUGESTOES.filter((s) => !usadas.has(s)).map((s) => (
+          <button key={s} type="button" className="lia-pilula" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
+        ))}
+      </div>
+    )
+
+    if (vazia) {
+      return (
+        <div className="lia lia-boas-vindas">
+          <div className="lia-orbe" aria-hidden="true">
+            <VoicePoweredOrb enableVoiceControl={ouvindo} />
+          </div>
+          <h1 className="lia-ola">
+            {saudacao}{nome ? ', ' : ''}
+            {nome && (
+              <span className="lia-nome">
+                {nome}
+                <svg className="lia-traco" viewBox="0 0 140 24" fill="none" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M6 16 Q 70 24, 134 14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
+                </svg>
+              </span>
+            )}
+            {!nome && '!'}
+          </h1>
+          <p className="lia-apres">Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</p>
+          {caixa}
+          {sugestoes}
+          <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes. Nada muda na viagem sem o seu sim.</p>
+        </div>
+      )
+    }
+
     return (
-      <div className="chat">
-        <div>
-          <h1>{NOME_IA}</h1>
-          <p className="muted">Sua concierge de viagem · conhece suas reservas, seu roteiro e seus documentos</p>
+      <div className="lia lia-conversa">
+        <div className="lia-topo">
+          <div className="lia-orbe-mini" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={ouvindo} /></div>
+          <div>
+            <h1>{NOME_IA}</h1>
+            <p className="muted">Sua concierge de viagem</p>
+          </div>
         </div>
         <div className="chat-msgs" aria-live="polite">
-          {!chat.length && <div className="msg dela">Oi, eu sou a {NOME_IA}, sua concierge no Flow. Pergunte o que quiser sobre esta viagem: horários, bilhetes, endereços, o que fazer amanhã.</div>}
-          {chat.map((m, n) => <div key={n} className={'msg ' + (m.papel === 'eu' ? 'minha' : 'dela')}>{m.texto}</div>)}
-          {chatCarregando && <div className="msg dela digitando" aria-label={`${NOME_IA} está respondendo`}>•••</div>}
+          {chat.map((m, n) =>
+            m.papel === 'eu'
+              ? <div key={n} className="msg minha">{m.texto}</div>
+              : (
+                <div key={n} className="msg dela lia-resposta">
+                  {m.texto.split(/(\s+)/).map((p, i) => (/^\s+$/.test(p) ? p : <span key={i} className="lia-palavra" style={{ animationDelay: `${Math.min(i * 22, 1600)}ms` }}>{p}</span>))}
+                </div>
+              ),
+          )}
+          {chatCarregando && <OrbePensando />}
           <div className="chat-fim" />
         </div>
         <div className="chat-doca">
-        <div className="chips">
-          {SUGESTOES.filter((s) => !usadas.has(s)).map((s) => (
-            <button key={s} type="button" className="chip-btn" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
-          ))}
-        </div>
-        <HandoffBeam
-          phase={(chatCarregando ? 'thinking' : falando ? 'speaking' : 'listening') as BeamPhase}
-          level={falando ? vozFalando : vozOuvindo}
-          palette="ember"
-          tone="dark"
-          phaseLabels={{ idle: 'Pronto', listening: 'Ouvindo', thinking: 'Pensando', speaking: 'Respondendo' }}
-          className="composer-beam"
-        >
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); perguntar(texto) }}>
-            <label htmlFor="pergunta" className="sr-only">Pergunte sobre a viagem</label>
-            <input
-              id="pergunta" name="pergunta" placeholder={ouvindo ? 'Pode falar…' : 'Pergunte sobre a viagem'} autoComplete="off" maxLength={500}
-              value={texto} onChange={(e) => setTexto(e.target.value)}
-            />
-            {Reconhecimento && (
-              <button type="button" className={'composer-btn' + (ouvindo ? ' ativo' : '')} onClick={ouvir} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg>
-              </button>
-            )}
-            <button type="submit" className="composer-btn enviar" aria-label="Enviar pergunta" disabled={chatCarregando || !texto.trim()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg>
-            </button>
-          </form>
-        </HandoffBeam>
-        <p className="hint">A {NOME_IA} só responde: nada muda na viagem sem o seu sim.</p>
+          {sugestoes}
+          {caixa}
+          <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes.</p>
         </div>
       </div>
     )
   }
+
 
   async function pedirRoteiroIA() {
     setAviso(null)
@@ -683,13 +738,14 @@ export default function Viagem({ id }: { id: string }) {
         atualizado_em: new Date().toISOString(),
       }, 'resolution=merge-duplicates,return=minimal')
       const nac = (campo(fd, 'nacionalidade') || 'BR').toUpperCase().slice(0, 2)
-      await rest('PATCH', `perfis?id=eq.${userId()}`, { nacionalidade: nac, passaporte_validade: campo(fd, 'passaporte_validade') })
+      await rest('PATCH', `perfis?id=eq.${userId()}`, { nome: campo(fd, 'nome') || null, nacionalidade: nac, passaporte_validade: campo(fd, 'passaporte_validade') })
       await recarregar(); ok('Perfil salvo.')
     }
     return (
       <form className="stack" noValidate onSubmit={(e) => enviar(e, salvar, erro, erroPt)}>
         <h1>Seu perfil de viagem</h1>
         <p className="muted">Destino, datas e quem vai já vêm das suas viagens. Aqui ficam só as suas preferências.</p>
+        <label>Como a {NOME_IA} deve te chamar?<input name="nome" maxLength={60} autoComplete="given-name" defaultValue={f.nome || ''} placeholder="Seu nome" /></label>
         <fieldset><legend>O que você mais quer nas viagens?</legend>{Pilulas({ nome: 'objetivos', lista: P_OBJ, marcados: p.objetivos || [], multi: true })}</fieldset>
         <fieldset><legend>Qual o seu ritmo?</legend>{Pilulas({ nome: 'ritmo', lista: P_RITMO, marcados: [p.ritmo], multi: false })}</fieldset>
         <fieldset><legend>Você gosta de acordar cedo?</legend>{Pilulas({ nome: 'horario', lista: P_HORA, marcados: [p.horario], multi: false })}</fieldset>
