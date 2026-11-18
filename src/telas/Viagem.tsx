@@ -9,7 +9,7 @@ import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
-import { calar, destravarVoz, falar, ligarVoz, tocar, vozLigada } from '../lib/voz'
+import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
@@ -77,6 +77,7 @@ export default function Viagem({ id }: { id: string }) {
   // Modo conversa: ouve, envia sozinho quando a pessoa para de falar, a Lia responde em voz alta e volta a ouvir
   const [conversa, setConversa] = useState(false)
   const [visita, setVisita] = useState('ola')
+  useEffect(() => () => { calar(); reconhecedor.current?.abort?.() }, [])
   const conversaRef = useRef(false)
   const textoRef = useRef('')
   const chatRef = useRef<Msg[]>([])
@@ -519,6 +520,8 @@ export default function Viagem({ id }: { id: string }) {
    *  O áudio de cada frase é gerado no servidor uma vez por nome e guardado no aparelho. Se falhar, toca a gravada geral. */
   async function falarOla() {
     destravarVoz()
+    calar()
+    const minha = novaVez() // se a pessoa sair e entrar de novo antes do áudio chegar, só a última saudação fala
     const hoje = hojeISO()
     let n = 0
     try {
@@ -541,10 +544,13 @@ export default function Viagem({ id }: { id: string }) {
           const r = await fetch(`${SUPA_URL}/functions/v1/voz-lia`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo }) })
           if (r.ok && (r.headers.get('Content-Type') || '').includes('audio')) { resp = r; await cache?.put(chave, r.clone()) }
         }
-        if (resp && await tocar(URL.createObjectURL(await resp.blob()))) return
+        if (!ehAVez(minha)) return
+        const blob = resp ? await resp.blob() : null
+        if (!ehAVez(minha)) return
+        if (blob && await tocar(URL.createObjectURL(blob))) return
       } catch { /* cai na saudação gravada */ }
     }
-    void falar('ola')
+    if (ehAVez(minha)) void falar('ola')
   }
   const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
 

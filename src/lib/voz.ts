@@ -17,6 +17,17 @@ export type Fala = keyof typeof FALAS
 let audio: HTMLAudioElement | null = null
 const el = () => (audio ??= Object.assign(new Audio(), { preload: 'auto' }))
 
+// Uma voz por vez: cada pedido novo de fala cancela o anterior (mesmo que ainda esteja carregando),
+// e se o Flow estiver aberto em outra aba/janela, a voz de lá para quando esta começa a falar.
+let vez = 0
+export const novaVez = () => ++vez
+export const ehAVez = (n: number) => n === vez
+const canal = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('flow-voz') : null
+if (canal) canal.onmessage = () => { vez++; if (audio) { audio.onended = null; audio.pause() } }
+const avisarOutras = () => { try { canal?.postMessage('falando') } catch { /* segue */ } }
+// Saiu do app (trocou de aba, minimizou, bloqueou a tela): a Lia para de falar
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden) calar() })
+
 export const vozLigada = () => { try { return localStorage.getItem('flow.voz') !== 'off' } catch { return true } }
 export function ligarVoz(sim: boolean) {
   try { localStorage.setItem('flow.voz', sim ? 'on' : 'off') } catch { /* sem armazenamento */ }
@@ -36,12 +47,13 @@ export function destravarVoz() {
 export async function tocar(url: string, aoTerminar?: () => void): Promise<boolean> {
   if (!vozLigada()) return false
   const a = el()
+  avisarOutras()
   a.onended = aoTerminar ? () => { a.onended = null; aoTerminar() } : null
   try { a.pause(); a.muted = false; a.src = url; a.currentTime = 0; await a.play(); return true } catch { a.onended = null; return false }
 }
 
 /** Para qualquer fala em andamento. */
-export function calar() { if (audio) { audio.onended = null; audio.pause() } }
+export function calar() { vez++; if (audio) { audio.onended = null; audio.pause() } }
 
 /** Toca uma fala. `umaVez` = só uma vez por sessão. Devolve false se não tocou. */
 export async function falar(f: Fala, umaVez = false): Promise<boolean> {
@@ -49,6 +61,7 @@ export async function falar(f: Fala, umaVez = false): Promise<boolean> {
   const chave = 'flow.voz.' + f
   try { if (umaVez && sessionStorage.getItem(chave)) return false } catch { /* segue */ }
   const a = el()
+  avisarOutras()
   try {
     a.pause()
     a.muted = false
