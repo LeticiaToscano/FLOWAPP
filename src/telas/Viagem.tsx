@@ -80,6 +80,7 @@ export default function Viagem({ id }: { id: string }) {
   const conversaRef = useRef(false)
   const textoRef = useRef('')
   const chatRef = useRef<Msg[]>([])
+  const silencios = useRef(0)
   const carregandoRef = useRef(false)
   useEffect(() => { textoRef.current = texto }, [texto])
   useEffect(() => { chatRef.current = chat }, [chat])
@@ -479,8 +480,8 @@ export default function Viagem({ id }: { id: string }) {
 
   const SUGESTOES = ['Que dia e que horas eu chego?', 'Onde está meu bilhete?', 'O que tenho amanhã?', 'Deixa amanhã mais leve']
 
-  /** voz: a Lia lê a resposta em voz alta (sempre que a voz não está no mudo). */
-  async function perguntar(texto: string, voz = vozLigada()) {
+  /** voz: a Lia responde em voz alta — só no modo "Falar com a Lia" (conversa). Por escrito, responde em texto. */
+  async function perguntar(texto: string, voz = false) {
     const t = texto.trim()
     if (!t || carregandoRef.current) return
     const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: t }]
@@ -568,7 +569,7 @@ export default function Viagem({ id }: { id: string }) {
     if (conversaRef.current) { pararConversa(); return }
     destravarVoz()
     if (!vozLigada()) { ligarVoz(true); setComVoz(true) }
-    conversaRef.current = true; setConversa(true); setTexto('')
+    conversaRef.current = true; silencios.current = 0; setConversa(true); setTexto('')
     ouvir(true)
   }
 
@@ -591,8 +592,9 @@ export default function Viagem({ id }: { id: string }) {
       if (!atual()) return
       setOuvindo(false); reconhecedor.current = null
       // Quando a pessoa para de falar, a pergunta vai sozinha (no modo conversa, a resposta vem em voz)
-      if (falado.trim()) void perguntar(falado, conversaRef.current || vozLigada())
-      else if (conversaRef.current) pararConversa()
+      if (falado.trim()) { silencios.current = 0; void perguntar(falado, conversaRef.current) }
+      // Na ligação, silêncio não encerra de cara: volta a ouvir (até 3 vezes seguidas sem ninguém falar)
+      else if (conversaRef.current) { if (++silencios.current < 3) ouvir(true); else pararConversa() }
     }
     r.onerror = (e) => {
       if (!atual()) return
@@ -620,7 +622,7 @@ export default function Viagem({ id }: { id: string }) {
       </button>
       <button type="button" className={'cci-ferr cci-conversa' + (conversa ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); alternarConversa() }} aria-pressed={conversa} aria-label={conversa ? 'Encerrar conversa por voz' : 'Conversar por voz com a Lia'}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 10v3" /><path d="M6 6v11" /><path d="M10 3v18" /><path d="M14 8v7" /><path d="M18 5v13" /><path d="M22 10v3" /></svg>
-        <span>{conversa ? 'Encerrar' : 'Conversar'}</span>
+        <span>{conversa ? 'Encerrar' : 'Falar com a Lia'}</span>
       </button>
       </>
     ) : null
