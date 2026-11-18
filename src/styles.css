@@ -161,14 +161,17 @@ s{color:var(--muted)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .soft{color:var(--soft);font-size:14px;line-height:1.5}
 
-/* Barra de mensagem do Assistente com o feixe de luz (HandoffBeam) */
-.composer-beam{box-shadow:0 14px 20px -6px rgba(0,0,0,.55)}
-.composer{display:flex;align-items:center;gap:8px;height:64px;padding:8px 8px 8px 20px;border-radius:32px;border:1px solid #2A2722;background:#0E0E0E}
-.composer:has(input:focus-visible){box-shadow:inset 0 0 0 1.5px rgba(226,209,168,.55)}
-.composer input{flex:1;min-width:0;min-height:0;height:auto;border:0;background:transparent;padding:0;font-size:15px;color:var(--text);outline:none;box-shadow:none}
-.composer input::placeholder{color:rgba(244,238,223,.45)}
-.composer-btn{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:999px;border:1px solid #2A2722;background:#1A1814;color:rgba(244,238,223,.72);cursor:pointer;transition:transform .12s,background .15s}
+/* Barra de mensagem do Assistente com o feixe de luz (HandoffBeam), igual à demo do componente */
+.composer-beam{width:min(560px,100%);margin:0 auto;box-shadow:0 14px 20px -6px rgba(0,0,0,.45)}
+.composer{display:flex;align-items:center;gap:8px;height:64px;width:100%;padding:8px 8px 8px 20px;border-radius:32px;border:1px solid #232323;background:#121212;margin:0}
+.composer:has(input:focus-visible){box-shadow:inset 0 0 0 2px #ec5c13}
+.composer input{flex:1;min-width:0;min-height:0;height:auto;border:0;border-radius:0;background:transparent;padding:0;font-size:15px;color:#ededed;outline:none;box-shadow:none}
+.composer input::placeholder{color:rgba(237,237,237,.5)}
+.composer-btn{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:999px;border:1px solid #232323;background:#202020;color:rgba(237,237,237,.72);cursor:pointer;transition:transform .15s,background-color .15s;padding:0}
 .composer-btn:active{transform:scale(.97)}
-.composer-btn.ativo{background:rgba(226,209,168,.16);color:var(--gold);border-color:rgba(226,209,168,.5)}
-.composer-btn.enviar{border:0;background:linear-gradient(135deg,#F6EDD6,#E2D1A8 55%,#C4A872);color:var(--gold-ink)}
-.composer-btn.enviar:disabled{background:#1A1814;color:rgba(244,238,223,.35);cursor:default}
+.composer-btn.ativo{color:#ec5c13;border-color:#ec5c13}
+.composer-btn.enviar{border:0;background:#202020;color:rgba(237,237,237,.72)}
+.composer-btn.enviar:disabled{opacity:1;cursor:default}
+/* sugestões: rolagem lateral sem a barra branca */
+.chips{scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}

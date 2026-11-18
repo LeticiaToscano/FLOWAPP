@@ -11,8 +11,6 @@ type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
 type Msg = { papel: 'eu' | 'assistente'; texto: string }
 
-// Feixe de luz do Assistente: paleta dourada do Flow (centro, borda, pensando, borda ouvindo, borda falando)
-const FEIXE_OURO = ['#F6EDD6', '#C4A872', '#FFF4DA', '#E2D1A8', '#D9C391']
 const vozOuvindo = createSimulatedVoice(11)
 const vozFalando = createSimulatedVoice(29)
 type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
@@ -57,7 +55,6 @@ export default function Viagem({ id }: { id: string }) {
   const [chat, setChat] = useState<Msg[]>([])
   const [chatCarregando, setChatCarregando] = useState(false)
   const [texto, setTexto] = useState('')
-  const [digitando, setDigitando] = useState(false)
   const [ouvindo, setOuvindo] = useState(false)
   const [falando, setFalando] = useState(false)
   const reconhecedor = useRef<Reconhecedor | null>(null)
@@ -500,9 +497,9 @@ export default function Viagem({ id }: { id: string }) {
           ))}
         </div>
         <HandoffBeam
-          phase={(chatCarregando ? 'thinking' : falando ? 'speaking' : ouvindo || (digitando && texto) ? 'listening' : 'idle') as BeamPhase}
-          level={falando ? vozFalando : ouvindo ? vozOuvindo : texto ? 0.35 : 0}
-          palette={FEIXE_OURO}
+          phase={(chatCarregando ? 'thinking' : falando ? 'speaking' : 'listening') as BeamPhase}
+          level={falando ? vozFalando : vozOuvindo}
+          palette="ember"
           tone="dark"
           phaseLabels={{ idle: 'Pronto', listening: 'Ouvindo', thinking: 'Pensando', speaking: 'Respondendo' }}
           className="composer-beam"
@@ -511,15 +508,15 @@ export default function Viagem({ id }: { id: string }) {
             <label htmlFor="pergunta" className="sr-only">Pergunte sobre a viagem</label>
             <input
               id="pergunta" name="pergunta" placeholder={ouvindo ? 'Pode falar…' : 'Pergunte sobre a viagem'} autoComplete="off" maxLength={500}
-              value={texto} onChange={(e) => setTexto(e.target.value)} onFocus={() => setDigitando(true)} onBlur={() => setDigitando(false)}
+              value={texto} onChange={(e) => setTexto(e.target.value)}
             />
             {Reconhecimento && (
               <button type="button" className={'composer-btn' + (ouvindo ? ' ativo' : '')} onClick={ouvir} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg>
               </button>
             )}
             <button type="submit" className="composer-btn enviar" aria-label="Enviar pergunta" disabled={chatCarregando || !texto.trim()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg>
             </button>
           </form>
         </HandoffBeam>
