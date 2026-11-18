@@ -9,8 +9,9 @@ import { LOGO_OURO } from '../lib/marca'
 type Modo = 'entrar' | 'criar' | 'recuperar'
 const voltarPara = () => encodeURIComponent(window.location.origin + '/')
 
-/** Foto da coluna da direita (Unsplash, uso livre): a asa do avião vista da janela, no fim da tarde. */
-const FOTO = 'https://images.unsplash.com/photo-1507812984078-917a274065be?w=1600&q=80&auto=format&fit=crop'
+/** Foto da coluna da direita (Unsplash, uso livre): jato executivo na pista ao pôr do sol. Original de 4096 px, recortado
+ *  em retrato com foco no avião e em alta resolução para telas retina. */
+const FOTO = 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=2000&h=2440&fit=crop&crop=focalpoint&fp-x=0.6&fp-y=0.55&q=85&auto=format'
 
 /** O "f" dourado e FLOW, em cima do título. */
 function Marca() {
