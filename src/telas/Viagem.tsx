@@ -479,7 +479,8 @@ export default function Viagem({ id }: { id: string }) {
 
   const SUGESTOES = ['Que dia e que horas eu chego?', 'Onde está meu bilhete?', 'O que tenho amanhã?', 'Deixa amanhã mais leve']
 
-  async function perguntar(texto: string, voz = false) {
+  /** voz: a Lia lê a resposta em voz alta (sempre que a voz não está no mudo). */
+  async function perguntar(texto: string, voz = vozLigada()) {
     const t = texto.trim()
     if (!t || carregandoRef.current) return
     const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: t }]
@@ -489,7 +490,7 @@ export default function Viagem({ id }: { id: string }) {
     destravarVoz()
     const avisoDemora = window.setTimeout(() => { if (!voz) void falar('pensando', true) }, 1800)
     try {
-      const d = await chamarIA<{ resposta: string; audio?: string }>('assistente-ia', { viagem_id: id, voz, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
+      const d = await chamarIA<{ resposta: string; audio?: string }>('assistente-ia', { viagem_id: id, voz, conversa: conversaRef.current, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
       chatRef.current = [...nova, { papel: 'assistente', texto: d.resposta }]
       setChat(chatRef.current)
       carregandoRef.current = false
@@ -553,6 +554,13 @@ export default function Viagem({ id }: { id: string }) {
     setPerfil((p) => ({ ...(p || {}), nome }))
   }
 
+  function alternarMudo() {
+    const v = !comVoz
+    ligarVoz(v); setComVoz(v)
+    if (v) destravarVoz()
+    else { calar(); setFalando(false); if (conversaRef.current) pararConversa() }
+  }
+
   function pararConversa() {
     conversaRef.current = false; setConversa(false); calar(); reconhecedor.current?.stop()
   }
@@ -583,7 +591,7 @@ export default function Viagem({ id }: { id: string }) {
       if (!atual()) return
       setOuvindo(false); reconhecedor.current = null
       // Quando a pessoa para de falar, a pergunta vai sozinha (no modo conversa, a resposta vem em voz)
-      if (falado.trim()) void perguntar(falado, conversaRef.current)
+      if (falado.trim()) void perguntar(falado, conversaRef.current || vozLigada())
       else if (conversaRef.current) pararConversa()
     }
     r.onerror = (e) => {
@@ -650,7 +658,7 @@ export default function Viagem({ id }: { id: string }) {
     if (vazia) {
       return (
         <div className="lia lia-boas-vindas">
-          <button type="button" className="lia-voz" onClick={() => { const v = !comVoz; ligarVoz(v); setComVoz(v); if (v) { destravarVoz(); void falar('ola') } }} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
+          <button type="button" className="lia-voz" onClick={alternarMudo} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
             {comVoz
               ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
               : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
@@ -696,7 +704,7 @@ export default function Viagem({ id }: { id: string }) {
             <h1>{NOME_IA}</h1>
             <p className="muted">Sua concierge de viagem</p>
           </div>
-          <button type="button" className="lia-voz" onClick={() => { const v = !comVoz; ligarVoz(v); setComVoz(v); if (v) { destravarVoz(); void falar('ola') } }} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
+          <button type="button" className="lia-voz" onClick={alternarMudo} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
             {comVoz
               ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
               : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}

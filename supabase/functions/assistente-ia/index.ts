@@ -6,7 +6,7 @@
 // Segurança: chave da Anthropic só no segredo ANTHROPIC_API_KEY; leitura com o login da pessoa (RLS);
 // limite de 60 perguntas por pessoa a cada 24 h; valores pagos e arquivos de comprovante não vão para a IA.
 //
-// Modo conversa (voz: true): a função também transforma a PRÓPRIA resposta em áudio com a voz natural da ElevenLabs
+// Voz ligada (voz: true): a função também transforma a PRÓPRIA resposta em áudio com a voz natural da ElevenLabs
 // (segredos ELEVENLABS_API_KEY e ELEVENLABS_VOICE_ID). O texto falado nunca vem do app, então ninguém usa a sua conta
 // de voz para gerar outros áudios. Limite de 40 respostas faladas por pessoa a cada 24 h.
 
@@ -14,6 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const ORIGENS = ['https://flowapp-virid.vercel.app', 'http://localhost:5173']
 const LIMITE_DIA = 60
+const LIMITE_VOZ = 40 // respostas faladas por pessoa a cada 24 h
 const MODELO = 'claude-sonnet-5-5'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const corta = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
   if (!quem?.user) return responder({ erro: 'Sessão expirada. Entre de novo.' }, 401)
   const eu = quem.user.id
 
-  let corpo: { viagem_id?: unknown; mensagens?: unknown; voz?: unknown } = {}
+  let corpo: { viagem_id?: unknown; mensagens?: unknown; voz?: unknown; conversa?: unknown } = {}
   try { corpo = await req.json() } catch { /* corpo inválido */ }
   const viagemId = String(corpo.viagem_id || '')
   if (!UUID.test(viagemId)) return responder({ erro: 'Viagem inválida.' }, 400)
@@ -98,9 +99,11 @@ Deno.serve(async (req) => {
   ].join('\n')
 
   const falada = corpo.voz === true && !!Deno.env.get('ELEVENLABS_API_KEY') && !!Deno.env.get('ELEVENLABS_VOICE_ID')
-  const sistemaFinal = falada
-    ? sistema + '\nESTA RESPOSTA SERÁ FALADA EM VOZ ALTA: responda em no máximo 3 frases curtas, sem listas, sem emojis, sem markdown, escrevendo horários como se fala (ex.: "sete e quarenta e um da manhã").'
-    : sistema
+  // voz: a resposta também é lida em voz alta. conversa: a pessoa está falando com a Lia (respostas bem curtas).
+  const sistemaFinal = !falada ? sistema
+    : corpo.conversa === true
+      ? sistema + '\nESTA RESPOSTA SERÁ FALADA EM VOZ ALTA: responda em no máximo 3 frases curtas, sem listas, sem emojis, sem markdown, escrevendo horários como se fala (ex.: "sete e quarenta e um da manhã").'
+      : sistema + '\nESTA RESPOSTA TAMBÉM SERÁ LIDA EM VOZ ALTA: seja direta (de preferência até 5 frases), sem emojis e sem tabelas; evite markdown pesado.'
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -117,9 +120,15 @@ Deno.serve(async (req) => {
 
     // Voz: limite próprio e só a resposta que a IA acabou de dar (até 700 caracteres)
     const { count: falas } = await db.from('uso_ia').select('id', { count: 'exact', head: true }).eq('tipo', 'voz_resposta').gte('criado_em', desde)
-    if ((falas ?? 0) >= 40) return responder({ resposta, aviso_voz: 'Limite de respostas faladas do dia atingido.' })
+    if ((falas ?? 0) >= LIMITE_VOZ) return responder({ resposta, aviso_voz: 'Limite de respostas faladas do dia atingido.' })
     await db.from('uso_ia').insert({ viagem_id: viagemId, tipo: 'voz_resposta' })
-    const falar = resposta.replace(/[*_#`>]/g, '').slice(0, 700)
+    // Texto para falar: sem marcações, até 700 caracteres, cortado no fim de uma frase
+    let falar = resposta.replace(/[*_#`>|]/g, '').replace(/^\s*[-•]\s*/gm, '').replace(/\n+/g, ' ').trim()
+    if (falar.length > 700) {
+      const corte = falar.slice(0, 700)
+      const fim = Math.max(corte.lastIndexOf('. '), corte.lastIndexOf('! '), corte.lastIndexOf('? '))
+      falar = fim > 200 ? corte.slice(0, fim + 1) : corte
+    }
     try {
       const v = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(Deno.env.get('ELEVENLABS_VOICE_ID')!)}?output_format=mp3_44100_64`, {
         method: 'POST',
