@@ -10,7 +10,7 @@ import { LiquidGlassDock, type LiquidGlassDockItem } from './ui/liquid-glass-doc
 export type AbaDock = 'hoje' | 'roteiro' | 'reservas' | 'documentos' | 'assistente'
 
 // Desenhos de linha (Lucide), todos na mesma cor: sóbrio, no lugar dos ícones coloridos
-const DESENHOS: Record<AbaDock, ReactNode> = {
+const DESENHOS: Record<AbaDock, ReactNode | null> = {
   hoje: (
     <>
       <circle cx="12" cy="12" r="4" />
@@ -37,12 +37,7 @@ const DESENHOS: Record<AbaDock, ReactNode> = {
       <path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" />
     </>
   ),
-  assistente: (
-    <>
-      <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
-      <path d="M20 2v4" /><path d="M22 4h-4" />
-    </>
-  ),
+  assistente: null, // a Lia usa a bola dela (ver Orbe abaixo)
 }
 
 export function MenuDock({ abas, atual, aoEscolher }: { abas: [AbaDock, string][]; atual: string; aoEscolher: (a: AbaDock) => void }) {
@@ -82,10 +77,39 @@ function AppIcon({ ativo, children }: { ativo?: boolean; children: ReactNode }) 
       <rect x="6.25" y="6.25" width="51.5" height="51.5" rx="14" fill={`url(#${id}-corpo)`} />
       <rect x="6.25" y="6.25" width="51.5" height="51.5" rx="14" fill={`url(#${id}-brilho)`} />
       <rect x="6.75" y="6.75" width="50.5" height="50.5" rx="13.5" fill="none" stroke={ativo ? '#E2D1A8' : '#fff'} strokeOpacity={ativo ? 0.45 : 0.14} />
-      <g transform="translate(19.4 19.4) scale(1.05)" fill="none" stroke={tinta} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        {children}
-      </g>
+      {children
+        ? (
+          <g transform="translate(19.4 19.4) scale(1.05)" fill="none" stroke={tinta} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            {children}
+          </g>
+        )
+        : <Orbe id={id} />}
       {ativo && <circle cx="32" cy="61.6" r="2.1" fill="#E2D1A8" />}
     </svg>
+  )
+}
+
+/** A bola da Lia em miniatura: anel fino de luz (branco-azulado em cima, azul, roxo embaixo), com um brilho em volta. */
+function Orbe({ id }: { id: string }) {
+  return (
+    <g>
+      <defs>
+        <linearGradient id={id + '-anel'} x1="0.85" y1="0.1" x2="0.15" y2="0.9">
+          <stop offset="0" stopColor="#E8F7FF" />
+          <stop offset="0.35" stopColor="#6CB8FF" />
+          <stop offset="0.7" stopColor="#6A4BE8" />
+          <stop offset="1" stopColor="#3B1E8F" />
+        </linearGradient>
+        <radialGradient id={id + '-miolo'} cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0.7" stopColor="#000" />
+          <stop offset="1" stopColor="#1B1440" />
+        </radialGradient>
+        <filter id={id + '-luz'} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1.6" />
+        </filter>
+      </defs>
+      <circle cx="32" cy="32" r="12.5" fill="none" stroke={`url(#${id}-anel)`} strokeWidth="3" opacity="0.7" filter={`url(#${id}-luz)`} />
+      <circle cx="32" cy="32" r="12.5" fill={`url(#${id}-miolo)`} stroke={`url(#${id}-anel)`} strokeWidth="1.6" />
+    </g>
   )
 }
