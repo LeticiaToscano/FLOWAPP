@@ -20,7 +20,7 @@ const NOME_IA = 'Lia'
 
 const vozOuvindo = createSimulatedVoice(11)
 const vozFalando = createSimulatedVoice(29)
-type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
+type Reconhecedor = { lang: string; interimResults: boolean; continuous: boolean; maxAlternatives?: number; start: () => void; stop: () => void; abort?: () => void; onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: ((e: any) => void) | null }
 const Reconhecimento: (new () => Reconhecedor) | undefined = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : undefined
 
 /** Abre um arquivo do cofre numa aba nova (a aba é aberta já no toque, para o navegador não bloquear). */
@@ -69,7 +69,10 @@ export default function Viagem({ id }: { id: string }) {
   const [conversa, setConversa] = useState(false)
   const conversaRef = useRef(false)
   const textoRef = useRef('')
+  const chatRef = useRef<Msg[]>([])
+  const carregandoRef = useRef(false)
   useEffect(() => { textoRef.current = texto }, [texto])
+  useEffect(() => { chatRef.current = chat }, [chat])
   const reconhecedor = useRef<Reconhecedor | null>(null)
   useEffect(() => () => reconhecedor.current?.stop(), [])
   const [ia, setIa] = useState<{ carregando: boolean; resumo?: string; itens?: Row[] } | null>(null)
@@ -468,15 +471,18 @@ export default function Viagem({ id }: { id: string }) {
 
   async function perguntar(texto: string, voz = false) {
     const t = texto.trim()
-    if (!t || chatCarregando) return
-    const nova: Msg[] = [...chat, { papel: 'eu', texto: t }]
-    reconhecedor.current?.stop()
+    if (!t || carregandoRef.current) return
+    const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: t }]
+    reconhecedor.current?.abort?.()
+    chatRef.current = nova; carregandoRef.current = true
     setChat(nova); setTexto(''); setChatCarregando(true); setAviso(null)
     destravarVoz()
     const avisoDemora = window.setTimeout(() => { if (!voz) void falar('pensando', true) }, 1800)
     try {
       const d = await chamarIA<{ resposta: string; audio?: string }>('assistente-ia', { viagem_id: id, voz, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
-      setChat([...nova, { papel: 'assistente', texto: d.resposta }])
+      chatRef.current = [...nova, { papel: 'assistente', texto: d.resposta }]
+      setChat(chatRef.current)
+      carregandoRef.current = false
       if (voz && d.audio) {
         setFalando(true)
         const tocou = await tocar('data:audio/mpeg;base64,' + d.audio, () => { setFalando(false); if (conversaRef.current) ouvir(true) })
@@ -486,10 +492,12 @@ export default function Viagem({ id }: { id: string }) {
         if (voz && conversaRef.current) setTimeout(() => ouvir(true), 400)
       }
     } catch (e) {
-      setChat([...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : `A ${NOME_IA} não respondeu agora.` }])
+      chatRef.current = [...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : `A ${NOME_IA} não respondeu agora.` }]
+      setChat(chatRef.current)
+      if (conversaRef.current) pararConversa()
     } finally {
       window.clearTimeout(avisoDemora)
-      setChatCarregando(false)
+      setChatCarregando(false); carregandoRef.current = false
       setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }
@@ -539,21 +547,34 @@ export default function Viagem({ id }: { id: string }) {
   function ouvir(forcar = false) {
     if (!Reconhecimento) return
     if (ouvindo && !forcar) { reconhecedor.current?.stop(); return }
-    reconhecedor.current?.stop()
+    const antigo = reconhecedor.current
+    reconhecedor.current = null
+    antigo?.abort?.()
     const r = new Reconhecimento()
-    r.lang = 'pt-BR'; r.interimResults = true; r.continuous = false
-    r.onresult = (e) => setTexto(Array.from(e.results as ArrayLike<any>).map((x) => x[0].transcript).join(''))
-    r.onend = () => {
-      setOuvindo(false); reconhecedor.current = null
-      // No modo conversa, quando a pessoa para de falar a pergunta vai sozinha
-      if (conversaRef.current && textoRef.current.trim()) void perguntar(textoRef.current, true)
+    r.lang = 'pt-BR'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1
+    let falado = ''
+    const atual = () => reconhecedor.current === r
+    r.onresult = (e) => {
+      if (!atual()) return
+      falado = Array.from(e.results as ArrayLike<any>).map((x) => x[0].transcript).join('')
+      setTexto(falado)
     }
-    r.onerror = () => { setOuvindo(false); reconhecedor.current = null; if (conversaRef.current) pararConversa() }
+    r.onend = () => {
+      if (!atual()) return
+      setOuvindo(false); reconhecedor.current = null
+      // Quando a pessoa para de falar, a pergunta vai sozinha (no modo conversa, a resposta vem em voz)
+      if (falado.trim()) void perguntar(falado, conversaRef.current)
+      else if (conversaRef.current) pararConversa()
+    }
+    r.onerror = (e) => {
+      if (!atual()) return
+      if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') erro('Libere o microfone para o site nas configurações do navegador.')
+    }
     reconhecedor.current = r
     calar()
     setTexto('')
     setOuvindo(true)
-    try { r.start() } catch { setOuvindo(false) }
+    try { r.start() } catch { reconhecedor.current = null; setOuvindo(false) }
   }
 
   function Assistente() {
