@@ -484,7 +484,6 @@ export default function Viagem({ id }: { id: string }) {
     )
   }
 
-  const SUGESTOES = ['Que dia e que horas eu chego?', 'Onde está meu bilhete?', 'O que tenho amanhã?', 'Deixa amanhã mais leve']
 
   /** voz: a Lia responde em voz alta — só no modo "Falar com a Lia" (conversa). Por escrito, responde em texto. */
   async function perguntar(texto: string, voz = false) {
@@ -667,7 +666,6 @@ export default function Viagem({ id }: { id: string }) {
   }
 
   function Assistente() {
-    const usadas = new Set(chat.filter((m) => m.papel === 'eu').map((m) => m.texto))
     const h = new Date().getHours()
     const saudacao = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite'
     const nome = primeiroNome()
@@ -706,14 +704,6 @@ export default function Viagem({ id }: { id: string }) {
           ferramentas={microfone}
         />
       </HandoffBeam>
-    )
-
-    const sugestoes = (
-      <div className="lia-sugestoes">
-        {SUGESTOES.filter((s) => !usadas.has(s)).map((s) => (
-          <button key={s} type="button" className="lia-pilula" onClick={() => perguntar(s)} disabled={chatCarregando}>{s}</button>
-        ))}
-      </div>
     )
 
     const acoes = (
@@ -799,7 +789,6 @@ export default function Viagem({ id }: { id: string }) {
             ? <>Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</>
             : SAUDACOES[visita].apres}</p>
           {caixa}
-          {sugestoes}
           <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes. Nada muda na viagem sem o seu sim.</p>
         </div>
       )
@@ -830,7 +819,6 @@ export default function Viagem({ id }: { id: string }) {
           <div className="chat-fim" />
         </div>
         <div className="chat-doca">
-          {sugestoes}
           {caixa}
           <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes.</p>
         </div>
