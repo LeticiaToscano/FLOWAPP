@@ -48,7 +48,9 @@ export default function Entrar({ avisoInicial }: { avisoInicial: Aviso }) {
     } else if (modo === 'criar') {
       const password = (fd.get('password') || '').toString()
       if (!senhaForte(password)) throw new Error('password')
-      const d = await authReq(`signup?redirect_to=${voltarPara()}`, { email, password, ...seguranca })
+      const nome = campo(fd, 'nome')
+      if (!nome) throw new Error('Diga como podemos te chamar.')
+      const d = await authReq(`signup?redirect_to=${voltarPara()}`, { email, password, data: { nome }, ...seguranca })
       if (d?.access_token) { setSessao(sessaoDe(d)); return }
       setModo('entrar')
       setAviso({ texto: `Enviamos um link de confirmação para ${email}. Abra o e-mail e confirme para entrar.` })

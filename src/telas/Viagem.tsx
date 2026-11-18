@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { AvisoBox, enviar, Icone, type Aviso } from '../components/comum'
-import { baixarArquivo, enviarArquivo, getToken, rest, SUPA_KEY, SUPA_URL, userId } from '../lib/supabase'
+import { baixarArquivo, enviarArquivo, getToken, nomeDoCadastro, rest, SUPA_KEY, SUPA_URL, userId } from '../lib/supabase'
 import { buscarCapaWikipedia } from '../lib/capa'
 import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
 import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
@@ -83,13 +83,18 @@ export default function Viagem({ id }: { id: string }) {
       ])
       if (!v?.[0]) { window.location.hash = '#/viagens'; return }
       setViagem(v[0]); setReservas(res || []); setRoteiro(rot || [])
-      setPerfilViagem(pv?.[0] || null); setPerfil(pf?.[0] || null); setDocs(dc || [])
+      let pfl = pf?.[0] || null
+      const doCadastro = nomeDoCadastro()
+      if (pfl && !pfl.nome && doCadastro) {
+        try { await rest('PATCH', `perfis?id=eq.${userId()}`, { nome: doCadastro }); pfl = { ...pfl, nome: doCadastro } } catch { /* tenta de novo depois */ }
+      }
+      setPerfilViagem(pv?.[0] || null); setPerfil(pfl); setDocs(dc || [])
     } catch (e) { erro(erroPt(e)) }
   }, [id])
 
   useEffect(() => { recarregar() }, [recarregar])
 
-  function irPara(a: Aba) { setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
+  function irPara(a: Aba) { if (a === 'assistente' && aba !== 'assistente') falarOla(); setAba(a); setResForm(null); setItemForm(null); setAviso(null); window.scrollTo(0, 0) }
   async function abrirReserva(rid: string) {
     setAba('reservas'); setResForm(rid); setHistorico([]); setAviso(null); window.scrollTo(0, 0)
     try { setHistorico(await rest<Row[]>('GET', `reserva_historico?reserva_id=eq.${rid}&select=*&order=alterado_em.desc&limit=20`) || []) } catch { /* opcional */ }
@@ -470,6 +475,29 @@ export default function Viagem({ id }: { id: string }) {
     }
   }
 
+  /** A Lia diz "Oi, Nome!" em voz alta ao abrir a aba (uma vez por sessão, com a voz em português do aparelho). */
+  function falarOla() {
+    try {
+      if (!('speechSynthesis' in window) || sessionStorage.getItem('flow.lia.ola')) return
+      const nome = primeiroNome()
+      const fala = new SpeechSynthesisUtterance(nome ? `Oi, ${nome}! Eu sou a ${NOME_IA}. Como posso te ajudar?` : `Oi! Eu sou a ${NOME_IA}. Como posso te ajudar?`)
+      fala.lang = 'pt-BR'; fala.rate = 1; fala.pitch = 1.05
+      const vozes = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('pt'))
+      fala.voice = vozes.find((v) => /luciana|francisca|thalita|vit[oó]ria|female|feminina/i.test(v.name)) || vozes.find((v) => v.lang === 'pt-BR') || vozes[0] || null
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(fala)
+      sessionStorage.setItem('flow.lia.ola', '1')
+    } catch { /* sem voz no aparelho: fica só o texto */ }
+  }
+  const primeiroNome = () => String(perfil?.nome || '').trim().split(/\s+/)[0]
+
+  async function salvarNome(fd: FormData) {
+    const nome = campo(fd, 'nome')
+    if (!nome) throw new Error('Diga como posso te chamar.')
+    await rest('PATCH', `perfis?id=eq.${userId()}`, { nome })
+    setPerfil((p) => ({ ...(p || {}), nome }))
+  }
+
   function ouvir() {
     if (!Reconhecimento) return
     if (ouvindo) { reconhecedor.current?.stop(); return }
@@ -486,8 +514,8 @@ export default function Viagem({ id }: { id: string }) {
   function Assistente() {
     const usadas = new Set(chat.filter((m) => m.papel === 'eu').map((m) => m.texto))
     const h = new Date().getHours()
-    const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'
-    const nome = String(perfil?.nome || '').trim().split(/\s+/)[0]
+    const saudacao = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite'
+    const nome = primeiroNome()
     const destino = viagem?.destino ? ` para ${viagem.destino}` : ''
     const vazia = !chat.length
 
@@ -534,18 +562,26 @@ export default function Viagem({ id }: { id: string }) {
             <VoicePoweredOrb enableVoiceControl={ouvindo} />
           </div>
           <h1 className="lia-ola">
-            {saudacao}{nome ? ', ' : ''}
+            Oi{nome ? ', ' : '!'}
             {nome && (
-              <span className="lia-nome">
-                {nome}
-                <svg className="lia-traco" viewBox="0 0 140 24" fill="none" preserveAspectRatio="none" aria-hidden="true">
-                  <path d="M6 16 Q 70 24, 134 14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
-                </svg>
-              </span>
+              <>
+                <span className="lia-nome">
+                  {nome}
+                  <svg className="lia-traco" viewBox="0 0 140 24" fill="none" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M6 16 Q 70 24, 134 14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
+                  </svg>
+                </span>!
+              </>
             )}
-            {!nome && '!'}
           </h1>
-          <p className="lia-apres">Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</p>
+          {!nome && (
+            <form className="lia-pede-nome" noValidate onSubmit={(e) => enviar(e, salvarNome, erro, erroPt)}>
+              <label htmlFor="lia-nome" className="sr-only">Como posso te chamar?</label>
+              <input id="lia-nome" name="nome" placeholder="Como posso te chamar?" maxLength={60} autoComplete="given-name" />
+              <button type="submit" className="lia-pilula">Pronto</button>
+            </form>
+          )}
+          <p className="lia-apres">Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</p>
           {caixa}
           {sugestoes}
           <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes. Nada muda na viagem sem o seu sim.</p>

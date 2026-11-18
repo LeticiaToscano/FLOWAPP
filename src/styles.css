@@ -276,3 +276,6 @@ s{color:var(--muted)}
   .lia-orbe,.lia-ola,.lia-apres,.lia-boas-vindas .composer-beam,.lia-boas-vindas .lia-sugestoes,.lia-boas-vindas .lia-aviso,.lia-palavra,.orbe-rotulo{animation:none}
   .lia-traco path{animation:none;stroke-dashoffset:0}
 }
+
+.lia-pede-nome{display:flex;gap:8px;width:min(360px,100%);animation:lia-chega .8s .3s cubic-bezier(.22,1,.36,1) both}
+.lia-pede-nome input{flex:1;min-height:40px;border-radius:999px;padding:0 16px;background:#30302E;border-color:#454540}

@@ -67,6 +67,14 @@ export function SignUpPage({ modo, title, description, heroImageSrc, aviso, onSu
             {aviso && <div className="sip-in" style={step(2)}>{aviso}</div>}
 
             <form className="sip-form" onSubmit={onSubmit} noValidate>
+              {criar && (
+                <div className="sip-in" style={step(3)}>
+                  <label className="sip-label" htmlFor={id + "-nome"}>Como podemos te chamar?</label>
+                  <div className="sip-field">
+                    <input id={id + "-nome"} className="sip-input" name="nome" type="text" autoComplete="given-name" placeholder="Seu nome" maxLength={60} required />
+                  </div>
+                </div>
+              )}
               <div className="sip-in" style={step(3)}>
                 <label className="sip-label" htmlFor={id + "-email"}>E-mail</label>
                 <div className="sip-field">

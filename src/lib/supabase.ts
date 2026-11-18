@@ -22,6 +22,8 @@ const ouvintes = new Set<(s: Sessao | null) => void>()
 
 export const getSessao = () => sessao
 export const userId = () => sessao?.user?.id
+/** Nome que a pessoa informou no cadastro (fica nos dados do login). */
+export const nomeDoCadastro = (): string => String((sessao?.user as { user_metadata?: { nome?: string } } | null)?.user_metadata?.nome || '').trim()
 export function setSessao(s: Sessao | null) {
   sessao = s
   if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
