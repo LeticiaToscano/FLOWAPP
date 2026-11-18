@@ -283,8 +283,24 @@ s{color:var(--muted)}
 .lia-boas-vindas{position:relative}
 .lia-voz{display:grid;place-items:center;width:38px;height:38px;border-radius:999px;border:1px solid #2A2722;background:transparent;color:#8A8A88;cursor:pointer;padding:0}
 .lia-voz[aria-pressed="true"]{color:#D2996E;border-color:rgba(210,153,110,.45)}
-.lia-boas-vindas .lia-voz{position:absolute;top:0;right:0}
-.lia-topo .lia-voz{margin-left:auto}
+.lia-acoes{display:flex;gap:8px}
+.lia-boas-vindas .lia-acoes{position:absolute;top:0;right:0;z-index:3}
+.lia-topo .lia-acoes{margin-left:auto}
 
 .cci-conversa{width:auto;padding:0 10px;gap:6px;font:inherit;font-size:13px}
 .cci-conversa.ativo{color:#D2996E;background:rgba(210,153,110,.12)}
+
+/* Conversas anteriores com a Lia */
+.lia-historico{width:100%;max-width:640px;align-self:center;text-align:left;background:#121212;border:1px solid #262626;border-radius:18px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.55);animation:lia-chega .35s cubic-bezier(.22,1,.36,1) both}
+.lia-boas-vindas .lia-historico{position:absolute;top:48px;right:0;z-index:4;max-height:60dvh;overflow:auto}
+.lia-historico-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.lia-historico ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:52dvh;overflow:auto}
+.lia-historico li{display:flex;align-items:center;gap:6px;border-radius:12px}
+.lia-historico li.atual{background:rgba(226,209,168,.08)}
+.lia-hist-abrir{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left;background:none;border:0;color:inherit;padding:10px 10px;border-radius:12px;cursor:pointer;font:inherit}
+.lia-hist-abrir:hover{background:#1A1A1A}
+.lia-hist-titulo{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14.5px;color:#EDEDED}
+.lia-hist-data{font-size:12px;color:#8A8A88}
+.lia-hist-apagar{flex:none;display:grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border-radius:10px;border:1px solid transparent;background:none;color:#6E6E6C;cursor:pointer;font:inherit;font-size:12.5px}
+.lia-hist-apagar:hover{color:#E8A0A0}
+.lia-hist-apagar.confirmar{color:#F2B8B8;border-color:rgba(232,160,160,.4)}

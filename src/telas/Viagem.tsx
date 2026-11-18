@@ -13,7 +13,8 @@ import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
-type Msg = { papel: 'eu' | 'assistente'; texto: string }
+type Msg = { papel: 'eu' | 'assistente'; texto: string; antiga?: boolean }
+type ConversaLia = { id: string; titulo: string; atualizado_em: string }
 
 /** Nome da concierge de IA do Flow (aparece na aba, no chat e nas respostas). */
 const NOME_IA = 'Lia'
@@ -70,6 +71,10 @@ export default function Viagem({ id }: { id: string }) {
   const [docsResumo, setDocsResumo] = useState('')
   const [chat, setChat] = useState<Msg[]>([])
   const [chatCarregando, setChatCarregando] = useState(false)
+  // Conversas anteriores com a Lia (privadas de cada pessoa, guardadas no Supabase)
+  const conversaIdRef = useRef<string | null>(null)
+  const [conversasLia, setConversasLia] = useState<ConversaLia[] | null>(null) // null = painel fechado
+  const [apagando, setApagando] = useState<string | null>(null)
   const [texto, setTexto] = useState('')
   const [ouvindo, setOuvindo] = useState(false)
   const [falando, setFalando] = useState(false)
@@ -496,6 +501,7 @@ export default function Viagem({ id }: { id: string }) {
       chatRef.current = [...nova, { papel: 'assistente', texto: d.resposta }]
       setChat(chatRef.current)
       carregandoRef.current = false
+      void guardarNoHistorico(t, d.resposta)
       if (voz && d.audio) {
         setFalando(true)
         const tocou = await tocar('data:audio/mpeg;base64,' + d.audio, () => { setFalando(false); if (conversaRef.current) ouvir(true) })
@@ -559,6 +565,53 @@ export default function Viagem({ id }: { id: string }) {
     if (!nome) throw new Error('Diga como posso te chamar.')
     await rest('PATCH', `perfis?id=eq.${userId()}`, { nome })
     setPerfil((p) => ({ ...(p || {}), nome }))
+  }
+
+  /** Guarda pergunta e resposta na conversa atual (cria a conversa na primeira pergunta). Falha aqui não atrapalha o chat. */
+  async function guardarNoHistorico(pergunta: string, resposta: string) {
+    try {
+      if (!conversaIdRef.current) {
+        const [c] = await rest<ConversaLia[]>('POST', 'lia_conversas', { viagem_id: id, titulo: pergunta.replace(/\s+/g, ' ').slice(0, 80) }, 'return=representation')
+        conversaIdRef.current = c.id
+      }
+      const conversa_id = conversaIdRef.current
+      await rest('POST', 'lia_mensagens', [{ conversa_id, papel: 'eu', texto: pergunta.slice(0, 8000) }, { conversa_id, papel: 'assistente', texto: resposta.slice(0, 8000) }], 'return=minimal')
+      await rest('PATCH', `lia_conversas?id=eq.${conversa_id}`, { atualizado_em: new Date().toISOString() }, 'return=minimal')
+    } catch { /* histórico é extra */ }
+  }
+
+  async function abrirHistorico() {
+    if (conversasLia) { setConversasLia(null); return }
+    try {
+      setConversasLia(await rest<ConversaLia[]>('GET', `lia_conversas?viagem_id=eq.${id}&select=id,titulo,atualizado_em&order=atualizado_em.desc&limit=50`))
+    } catch { erro('Não consegui abrir as conversas agora.') }
+  }
+
+  async function abrirConversa(c: ConversaLia) {
+    try {
+      const msgs = await rest<Msg[]>('GET', `lia_mensagens?conversa_id=eq.${c.id}&select=papel,texto&order=id.asc&limit=400`)
+      pararConversa()
+      conversaIdRef.current = c.id
+      chatRef.current = msgs.map((m) => ({ ...m, antiga: true }))
+      setChat(chatRef.current); setTexto(''); setConversasLia(null); setApagando(null)
+      setTimeout(() => document.querySelector('.chat-fim')?.scrollIntoView(), 50)
+    } catch { erro('Não consegui abrir essa conversa.') }
+  }
+
+  function novaConversa() {
+    pararConversa()
+    conversaIdRef.current = null
+    chatRef.current = []
+    setChat([]); setTexto(''); setConversasLia(null); setApagando(null)
+  }
+
+  async function apagarConversa(c: ConversaLia) {
+    if (apagando !== c.id) { setApagando(c.id); return }
+    try {
+      await rest('DELETE', `lia_conversas?id=eq.${c.id}`, undefined, 'return=minimal')
+      setConversasLia((h) => (h || []).filter((x) => x.id !== c.id)); setApagando(null)
+      if (conversaIdRef.current === c.id) novaConversa()
+    } catch { erro('Não consegui apagar essa conversa.') }
   }
 
   function alternarMudo() {
@@ -663,14 +716,62 @@ export default function Viagem({ id }: { id: string }) {
       </div>
     )
 
+    const acoes = (
+      <div className="lia-acoes">
+        {!vazia && (
+          <button type="button" className="lia-voz" onClick={novaConversa} aria-label="Nova conversa" title="Nova conversa">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        )}
+        <button type="button" className="lia-voz" onClick={() => void abrirHistorico()} aria-pressed={!!conversasLia} aria-label="Conversas anteriores" title="Conversas anteriores">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+        </button>
+        <button type="button" className="lia-voz" onClick={alternarMudo} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
+          {comVoz
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
+        </button>
+      </div>
+    )
+
+    const quando = (iso: string) => {
+      const d = new Date(iso), hj = new Date()
+      if (d.toDateString() === hj.toDateString()) return 'Hoje, ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const ont = new Date(hj.getTime() - 864e5)
+      if (d.toDateString() === ont.toDateString()) return 'Ontem'
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+    }
+    const painel = conversasLia && (
+      <div className="lia-historico" role="dialog" aria-label="Conversas anteriores">
+        <div className="lia-historico-cab">
+          <strong>Conversas anteriores</strong>
+          <button type="button" className="lia-pilula" onClick={novaConversa}>+ Nova conversa</button>
+        </div>
+        {conversasLia.length === 0
+          ? <p className="muted">Nenhuma conversa ainda. Elas aparecem aqui depois da primeira pergunta.</p>
+          : (
+            <ul>
+              {conversasLia.map((c) => (
+                <li key={c.id} className={conversaIdRef.current === c.id ? 'atual' : ''}>
+                  <button type="button" className="lia-hist-abrir" onClick={() => void abrirConversa(c)}>
+                    <span className="lia-hist-titulo">{c.titulo}</span>
+                    <span className="lia-hist-data">{quando(c.atualizado_em)}</span>
+                  </button>
+                  <button type="button" className={'lia-hist-apagar' + (apagando === c.id ? ' confirmar' : '')} onClick={() => void apagarConversa(c)} aria-label={apagando === c.id ? 'Confirmar: apagar conversa' : 'Apagar conversa'}>
+                    {apagando === c.id ? 'Apagar?' : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+    )
+
     if (vazia) {
       return (
         <div className="lia lia-boas-vindas">
-          <button type="button" className="lia-voz" onClick={alternarMudo} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
-            {comVoz
-              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
-              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
-          </button>
+          {acoes}
+          {painel}
           <div className="lia-orbe" aria-hidden="true">
             <VoicePoweredOrb enableVoiceControl={ouvindo || conversa} />
           </div>
@@ -712,19 +813,16 @@ export default function Viagem({ id }: { id: string }) {
             <h1>{NOME_IA}</h1>
             <p className="muted">Sua concierge de viagem</p>
           </div>
-          <button type="button" className="lia-voz" onClick={alternarMudo} aria-pressed={comVoz} aria-label={comVoz ? 'Silenciar a voz da Lia' : 'Ligar a voz da Lia'}>
-            {comVoz
-              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
-              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></svg>}
-          </button>
+          {acoes}
         </div>
+        {painel}
         <div className="chat-msgs" aria-live="polite">
           {chat.map((m, n) =>
             m.papel === 'eu'
               ? <div key={n} className="msg minha">{m.texto}</div>
               : (
                 <div key={n} className="msg dela lia-resposta">
-                  {m.texto.split(/(\s+)/).map((p, i) => (/^\s+$/.test(p) ? p : <span key={i} className="lia-palavra" style={{ animationDelay: `${Math.min(i * 22, 1600)}ms` }}>{p}</span>))}
+                  {m.antiga ? m.texto : m.texto.split(/(\s+)/).map((p, i) => (/^\s+$/.test(p) ? p : <span key={i} className="lia-palavra" style={{ animationDelay: `${Math.min(i * 22, 1600)}ms` }}>{p}</span>))}
                 </div>
               ),
           )}
