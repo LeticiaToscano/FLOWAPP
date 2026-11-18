@@ -32,6 +32,13 @@ export function destravarVoz() {
   a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; a.dataset.livre = '1' }).catch(() => { a.muted = false })
 }
 
+/** Toca um áudio qualquer (ex.: a saudação com o nome, gerada no servidor). */
+export async function tocar(url: string): Promise<boolean> {
+  if (!vozLigada()) return false
+  const a = el()
+  try { a.pause(); a.muted = false; a.src = url; a.currentTime = 0; await a.play(); return true } catch { return false }
+}
+
 /** Toca uma fala. `umaVez` = só uma vez por sessão. Devolve false se não tocou. */
 export async function falar(f: Fala, umaVez = false): Promise<boolean> {
   if (!vozLigada()) return false
