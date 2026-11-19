@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
   const sistema = [
     'Você é o planejador de roteiros do Flow, um app de viagem premium para brasileiros.',
     'Monte um roteiro dia a dia, realista e bem distribuído, em português do Brasil.',
+    'Responda SEMPRE chamando a ferramenta propor_roteiro, sem texto fora dela.',
     'Regras:',
     '- Use somente dias entre a data de início e a de fim da viagem.',
     '- Respeite o ritmo do perfil (tranquilo: 2–3 atividades por dia; equilibrado: 3–4; intenso: 4–6) e o horário preferido (começa cedo ou mais tarde).',
@@ -149,7 +150,7 @@ Deno.serve(async (req) => {
         max_tokens: 8000,
         system: sistema,
         tools: [FERRAMENTA],
-        tool_choice: { type: 'tool', name: 'propor_roteiro' },
+        tool_choice: { type: 'auto' } /* este modelo não aceita forçar a ferramenta: a instrução pede para usá-la */,
         messages: [{ role: 'user', content: 'Dados da viagem (JSON):\n' + JSON.stringify(contexto) }],
       }),
     })
