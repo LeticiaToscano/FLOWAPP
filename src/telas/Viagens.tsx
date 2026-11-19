@@ -40,7 +40,8 @@ export function useCapas(viagens: ViagemRow[]) {
   return capas
 }
 
-export const capaDa = (v: ViagemRow, capas: Record<string, string>) => capas[v.id] || v.capa_url || capaPadrao(v.titulo)
+/** Capa da viagem: a foto que a pessoa enviou > a imagem pronta da região > a foto do destino > a capa padrão. */
+export const capaDa = (v: ViagemRow, capas: Record<string, string>) => capas[v.id] || capaDaRegiao(v) || v.capa_url || capaPadrao(v.titulo)
 
 export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; lista?: boolean; avisoInicial: Aviso }) {
   const [viagens, setViagens] = useState<ViagemRow[]>([])
@@ -112,7 +113,7 @@ export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; 
                 <TripCard
                   key={v.id}
                   href={`#/viagem/${v.id}`}
-                  imagem={capas[v.id] || capaDaRegiao(v) || capaDa(v, capas)}
+                  imagem={capaDa(v, capas)}
                   imagemAlt={`Foto de ${v.destino || v.titulo}`}
                   rotulo={[tipo, d ? `${d} ${d === 1 ? 'dia' : 'dias'}` : null, quando].filter(Boolean).join(' · ')}
                   titulo={v.titulo}

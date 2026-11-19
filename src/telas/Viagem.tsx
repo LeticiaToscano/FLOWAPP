@@ -5,6 +5,7 @@ import { buscarCapaWikipedia } from '../lib/capa'
 import { campo, erroPt, MOEDAS, TIPOS, tipoNome } from '../lib/textos'
 import { fmtDataLonga, fmtDiaHora, fmtHora, fmtMoeda, FUSOS, fusoNome, hojeISO, localParaUtc, utcParaInput } from '../lib/tempo'
 import { capaDa, useCapas, type ViagemRow } from './Viagens'
+import { capaDaRegiao, NOME_REGIAO, regiaoDaViagem } from '../lib/regioes'
 import { HandoffBeam, createSimulatedVoice, type BeamPhase } from '../components/ui/handoff-beam'
 import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
@@ -155,6 +156,12 @@ export default function Viagem({ id }: { id: string }) {
         await recarregar(); ok('Foto da viagem atualizada.')
       } catch (err) { erro(erroPt(err)) }
     }
+    async function usarImagemPronta() {
+      try {
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: null })
+        await recarregar(); ok('Voltamos para a imagem pronta da região.')
+      } catch (err) { erro(erroPt(err)) }
+    }
     async function buscarFoto() {
       try {
         const c = await buscarCapaWikipedia(viagem!.destino || viagem!.titulo)
@@ -167,7 +174,7 @@ export default function Viagem({ id }: { id: string }) {
     return (
       <>
         <img className="capa-mini" src={capaDa(viagem!, capas)} alt={`Foto de ${viagem!.destino || viagem!.titulo}`} />
-        {!viagem!.capa_path && viagem!.capa_credito && <span className="credito">{viagem!.capa_credito}</span>}
+        {!viagem!.capa_path && !capaDaRegiao(viagem!) && viagem!.capa_credito && <span className="credito">{viagem!.capa_credito}</span>}
         <p className="muted">{fmtDataLonga(hojeISO())}</p>
 
         {revisar.map((r) => (
@@ -226,9 +233,11 @@ export default function Viagem({ id }: { id: string }) {
 
         <section className="card">
           <strong>Foto da viagem</strong>
-          <p className="hint">Aparece no seu leque de viagens. Use uma foto sua ou a do destino.</p>
+          <p className="hint">Aparece aqui e em Minhas viagens. {regiaoDaViagem(viagem!) ? `Sem foto sua, usamos a imagem pronta da ${NOME_REGIAO[regiaoDaViagem(viagem!)!]}.` : 'Use uma foto sua ou a do destino.'}</p>
           <label>Enviar foto (até 10 MB)<input type="file" accept="image/jpeg,image/png,image/heic,image/webp" onChange={trocarCapa} /></label>
-          <button type="button" className="btn sm" onClick={buscarFoto}>Usar foto do destino</button>
+          {regiaoDaViagem(viagem!)
+            ? viagem!.capa_path && <button type="button" className="btn sm" onClick={usarImagemPronta}>Voltar para a imagem pronta</button>
+            : <button type="button" className="btn sm" onClick={buscarFoto}>Usar foto do destino</button>}
         </section>
       </>
     )
