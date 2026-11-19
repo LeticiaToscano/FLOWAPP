@@ -26,7 +26,7 @@ const mapa = (v: number, de: number[], para: number[]) => {
 }
 
 export default function PerspectiveTunnelHero({
-  fotos, rotulo, titulo, subtitulo, duracao = 7000, aoTerminar, final,
+  fotos, rotulo, titulo, subtitulo, duracao = 7000, aoTerminar, final, luz,
 }: {
   fotos: FotoTunel[]
   rotulo?: string
@@ -37,12 +37,17 @@ export default function PerspectiveTunnelHero({
   aoTerminar?: () => void
   /** O que aparece dentro do círculo quando todas as fotos já passaram (o túnel para ali). */
   final?: React.ReactNode
+  /** Luz que nasce do anel do meio e cresce junto com ele no fim do voo (fica por trás do conteúdo final). */
+  luz?: React.ReactNode
 }) {
   const [noFim, setNoFim] = useState(false)
   const raiz = useRef<HTMLDivElement>(null)
   const cartoes = useRef<(HTMLDivElement | null)[]>([])
   const tituloRef = useRef<HTMLDivElement>(null)
   const dicaRef = useRef<HTMLDivElement>(null)
+  const anel1 = useRef<HTMLDivElement>(null)
+  const anel2 = useRef<HTMLDivElement>(null)
+  const luzRef = useRef<HTMLDivElement>(null)
   const lista = useRef(montar(fotos)).current
   const [palco, setPalco] = useState(() => ({ w: window.innerWidth, h: window.innerHeight, cel: window.innerWidth < 768 }))
   const palcoRef = useRef(palco)
@@ -62,14 +67,15 @@ export default function PerspectiveTunnelHero({
     let alvo = 0, prog = 0, vel = 0 // progresso desejado, mostrado e a velocidade da mola
     let px = 0, py = 0, cx = 0, cy = 0 // ponteiro (bruto e suavizado)
     let terminou = false
+    let mostrouFim = false
     let ultimo = performance.now()
     let raf = 0
 
-    const roda = (e: WheelEvent) => { e.preventDefault(); if (terminou) return; alvo = Math.min(1, Math.max(0, alvo + e.deltaY * 0.0008)) }
+    const roda = (e: WheelEvent) => { e.preventDefault(); if (mostrouFim) return; alvo = Math.min(1, Math.max(0, alvo + e.deltaY * 0.0008)) }
     let toqueY: number | null = null
     const tIni = (e: TouchEvent) => { toqueY = e.touches[0].clientY }
     const tMov = (e: TouchEvent) => {
-      if (toqueY == null || terminou) return
+      if (toqueY == null || mostrouFim) return
       const y = e.touches[0].clientY
       alvo = Math.min(1, Math.max(0, alvo + (toqueY - y) * 0.0025))
       toqueY = y
@@ -112,11 +118,27 @@ export default function PerspectiveTunnelHero({
       })
       if (tituloRef.current) {
         tituloRef.current.style.transform = `scale(${mapa(prog, [0, 0.5, 1], [0.7, 1, 1.35])})`
-        tituloRef.current.style.opacity = String(mapa(prog, [0, 0.12, 0.85, 1], [0.25, 1, 1, 0]))
+        tituloRef.current.style.opacity = String(mapa(prog, [0, 0.12, 0.76, 0.92], [0.25, 1, 1, 0]))
       }
       if (dicaRef.current) dicaRef.current.style.opacity = String(mapa(prog, [0, 0.12], [1, 0]))
 
-      if (!terminou && prog > 0.985) { terminou = true; alvo = 1; setNoFim(true); fim.current?.() }
+      // Fim do voo: o anel do meio cresce devagar até virar o círculo final, e a luz nasce dele, tudo no ritmo do voo
+      const suave = (x: number) => x * x * (3 - 2 * x)
+      const e = suave(faixa(prog, 0.7, 1))
+      const menor = Math.min(w, h)
+      const base1 = 0.48 * menor, fim1 = Math.min(0.86 * w, 0.74 * h, 440) * (w <= 480 ? 92 / 86 : 1)
+      const base2 = 0.76 * menor, fim2 = Math.min(w, 0.92 * h, 560)
+      if (anel1.current) {
+        anel1.current.style.transform = `scale(${1 + (fim1 / base1 - 1) * e})`
+        anel1.current.style.borderColor = `rgba(226,209,168,${0.12 + 0.1 * Math.sin(Math.PI * e)})`
+      }
+      if (anel2.current) anel2.current.style.transform = `scale(${1 + (fim2 / base2 - 1) * e})`
+      if (luzRef.current) {
+        luzRef.current.style.transform = `translate(-50%,-50%) scale(${base1 / fim1 + (1 - base1 / fim1) * e})`
+        luzRef.current.style.opacity = String(suave(faixa(prog, 0.66, 0.94)))
+      }
+      if (!mostrouFim && prog > 0.93) { mostrouFim = true; alvo = 1; setNoFim(true) }
+      if (!terminou && prog > 0.985) { terminou = true; alvo = 1; fim.current?.() }
       raf = requestAnimationFrame(quadro)
     }
     raf = requestAnimationFrame(quadro)
@@ -135,8 +157,9 @@ export default function PerspectiveTunnelHero({
     <div ref={raiz} className={'tunel' + (noFim ? ' tunel-fim' : '')} style={{ perspective: palco.cel ? '900px' : '1200px' }}>
       <div className="tunel-grade" aria-hidden="true" />
       <div className="tunel-brilho" aria-hidden="true" />
-      <div className="tunel-anel" aria-hidden="true" />
-      <div className="tunel-anel tunel-anel-2" aria-hidden="true" />
+      <div ref={anel1} className="tunel-anel" aria-hidden="true" />
+      <div ref={anel2} className="tunel-anel tunel-anel-2" aria-hidden="true" />
+      {luz && <div ref={luzRef} className="tunel-luz" aria-hidden="true" style={{ opacity: 0 }}>{luz}</div>}
 
       <div ref={tituloRef} className="tunel-titulo">
         {rotulo && <p className="tunel-rotulo">{rotulo}</p>}

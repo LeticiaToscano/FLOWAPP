@@ -173,6 +173,7 @@ export default function Abertura() {
             subtitulo="Voos, hotéis, roteiro e documentos num só lugar."
             duracao={4800}
             aoTerminar={() => setNoFim(true)}
+            luz={<VoicePoweredOrb enableVoiceControl={false} />}
             final={<FimDoTunel viagens={viagens} logada={!!getSessao()} irPara={irPara} />}
           />
         </div>
@@ -193,9 +194,6 @@ const quando = (iso: string | null) => (iso ? DATA.format(new Date(iso + 'T12:00
 function FimDoTunel({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null; logada: boolean; irPara: (hash: string) => void }) {
   const tem = !!viagens && viagens.length > 0
   return (
-    <>
-    {/* as luzes em volta do círculo: a mesma bola da Lia, do tamanho do círculo (sem microfone) */}
-    <div className="fim-orbe" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={false} /></div>
     <div className="fim-tunel">
       <span className="fim-marca" aria-hidden="true" dangerouslySetInnerHTML={{ __html: FLOW_MARK_OURO }} />
       {tem ? (
@@ -220,6 +218,5 @@ function FimDoTunel({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null
         </>
       )}
     </div>
-    </>
   )
 }

@@ -324,12 +324,9 @@ s{color:var(--muted)}
 .tunel-legenda span{font-size:12px;font-weight:500;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.95);text-shadow:0 1px 4px rgba(0,0,0,.6)}
 
 /* Fim do túnel: o círculo cresce e recebe "Comece sua viagem" / as próximas viagens */
-.tunel .tunel-anel{transition:width .8s cubic-bezier(.22,1,.36,1),height .8s cubic-bezier(.22,1,.36,1),border-color .8s ease,box-shadow .8s ease,opacity .6s ease}
-.tunel-fim .tunel-anel:not(.tunel-anel-2){width:min(86vw,74vh,440px);height:min(86vw,74vh,440px);border-color:rgba(226,209,168,.38);box-shadow:0 0 80px rgba(226,209,168,.10),inset 0 0 60px rgba(226,209,168,.06)}
-.tunel-fim .tunel-anel-2{width:min(100vw,92vh,560px);height:min(100vw,92vh,560px);opacity:.6}
 .tunel-fim .tunel-dica{display:none}
 .tunel-final{position:absolute;inset:0;z-index:30;display:grid;place-items:center;pointer-events:none}
-.fim-tunel{pointer-events:auto;width:min(60vw,52vh,330px);display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;animation:fim-chega .7s .2s cubic-bezier(.22,1,.36,1) both}
+.fim-tunel{pointer-events:auto;width:min(60vw,52vh,330px);display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;animation:fim-chega .9s .15s cubic-bezier(.22,1,.36,1) both}
 @keyframes fim-chega{from{opacity:0;transform:translateY(10px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 .fim-marca{display:block;width:34px;height:34px}
 .fim-marca svg{display:block;width:100%;height:100%}
@@ -344,6 +341,6 @@ s{color:var(--muted)}
 .fim-nova{background:none;border:0;color:var(--gold);font:inherit;font-size:14px;font-weight:500;cursor:pointer;padding:6px 10px}
 .fim-comecar:focus-visible,.fim-viagem:focus-visible,.fim-nova:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 
-.fim-orbe{position:absolute;left:50%;top:50%;width:calc(min(86vw,74vh,440px) * 1.36);height:calc(min(86vw,74vh,440px) * 1.36);transform:translate(-50%,-50%);pointer-events:none;animation:tunel-entra 1.2s ease both}
-.tunel-fim .tunel-anel:not(.tunel-anel-2){border-color:rgba(226,209,168,.12)}
-@media (max-width:480px){.fim-viagem{min-height:40px;padding:0 12px}.fim-viagem-nome{font-size:14px}.fim-tunel{gap:10px}.fim-orbe{width:calc(min(92vw,74vh,440px) * 1.36);height:calc(min(92vw,74vh,440px) * 1.36)}}
+.tunel-luz{position:absolute;left:50%;top:50%;width:calc(min(86vw,74vh,440px) * 1.36);height:calc(min(86vw,74vh,440px) * 1.36);transform:translate(-50%,-50%);pointer-events:none;will-change:transform,opacity}
+.tunel-anel{will-change:transform}
+@media (max-width:480px){.fim-viagem{min-height:40px;padding:0 12px}.fim-viagem-nome{font-size:14px}.fim-tunel{gap:10px}.tunel-luz{width:calc(min(92vw,74vh,440px) * 1.36);height:calc(min(92vw,74vh,440px) * 1.36)}}
