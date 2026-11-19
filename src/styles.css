@@ -299,7 +299,7 @@ s{color:var(--muted)}
 
 /* Menu da viagem: dock de vidro líquido presa embaixo, no centro (celular e web) */
 .lgd.flow-dock{position:fixed;left:50%;translate:-50% 0;bottom:calc(14px + env(safe-area-inset-bottom));z-index:30;max-width:calc(100% - 24px);--lgd-tint:rgba(255,255,255,.10);--lgd-blur:14px}
-@media (max-width:899px){ .lgd.flow-dock{--lgd-icon:54px;--lgd-gap:6px;padding:10px} }
+@media (max-width:899px){ .lgd.flow-dock{--lgd-icon:50px;--lgd-gap:5px;padding:9px} }
 @media (max-width:899px) and (hover:hover){ .lgd.flow-dock:hover{padding:12px} }
 
 /* Abertura — túnel dos destinos (depois do logo) */
@@ -383,3 +383,13 @@ s{color:var(--muted)}
   .trip-card-info{width:60%;padding:24px 28px}
 }
 .viagens-base.viagens-base-larga{max-width:860px;width:100%}
+
+/* Perfil: foto da viagem em versão compacta */
+.foto-compacta{display:flex;align-items:center;gap:14px;padding:12px}
+.foto-compacta img{flex:none;width:76px;height:76px;border-radius:12px;object-fit:cover;background:#111}
+.foto-compacta-txt{display:flex;flex-direction:column;gap:4px;min-width:0}
+.foto-compacta-txt .hint{margin:0}
+.foto-compacta-acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.foto-compacta-acoes label.btn{cursor:pointer;display:inline-flex;align-items:center}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--gold)}
+.card.foto-compacta{flex-direction:row;align-items:center;text-align:left}.card.foto-compacta .foto-compacta-txt{align-items:flex-start}

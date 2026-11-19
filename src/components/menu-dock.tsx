@@ -7,7 +7,7 @@ import { LiquidGlassDock, type LiquidGlassDockItem } from './ui/liquid-glass-doc
  * como o app aberto na dock do Mac.
  */
 
-export type AbaDock = 'hoje' | 'roteiro' | 'reservas' | 'documentos' | 'assistente'
+export type AbaDock = 'hoje' | 'roteiro' | 'reservas' | 'documentos' | 'assistente' | 'perfil'
 
 // Desenhos de linha (Lucide), todos na mesma cor: sóbrio, no lugar dos ícones coloridos
 const DESENHOS: Record<AbaDock, ReactNode | null> = {
@@ -38,6 +38,12 @@ const DESENHOS: Record<AbaDock, ReactNode | null> = {
     </>
   ),
   assistente: null, // a Lia usa a bola dela (ver Orbe abaixo)
+  perfil: (
+    <>
+      <circle cx="12" cy="8" r="5" />
+      <path d="M20 21a8 8 0 0 0-16 0" />
+    </>
+  ),
 }
 
 export function MenuDock({ abas, atual, aoEscolher }: { abas: [AbaDock, string][]; atual: string; aoEscolher: (a: AbaDock) => void }) {

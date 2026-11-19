@@ -145,32 +145,6 @@ export default function Viagem({ id }: { id: string }) {
     })
     const hoje = roteiro.filter((i) => i.dia === hojeISO())
 
-    async function trocarCapa(e: ChangeEvent<HTMLInputElement>) {
-      const f = e.target.files?.[0]
-      if (!f) return
-      try {
-        if (!/^image\//.test(f.type)) throw new Error('Escolha uma imagem (JPG, PNG, HEIC ou WEBP).')
-        ok('Enviando foto…')
-        const path = await enviarArquivo(id, f, 'capa-')
-        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: path })
-        await recarregar(); ok('Foto da viagem atualizada.')
-      } catch (err) { erro(erroPt(err)) }
-    }
-    async function usarImagemPronta() {
-      try {
-        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: null })
-        await recarregar(); ok('Voltamos para a imagem pronta da região.')
-      } catch (err) { erro(erroPt(err)) }
-    }
-    async function buscarFoto() {
-      try {
-        const c = await buscarCapaWikipedia(viagem!.destino || viagem!.titulo)
-        if (!c) { erro('Não encontramos uma foto para este destino. Envie uma foto sua.'); return }
-        await rest('PATCH', `viagens?id=eq.${id}`, { capa_url: c.url, capa_credito: c.credito, capa_path: null })
-        await recarregar(); ok('Foto do destino atualizada.')
-      } catch (err) { erro(erroPt(err)) }
-    }
-
     return (
       <>
         <img className="capa-mini" src={capaDa(viagem!, capas)} alt={`Foto de ${viagem!.destino || viagem!.titulo}`} />
@@ -231,14 +205,6 @@ export default function Viagem({ id }: { id: string }) {
         {hoje.length > 0 && (<><h2>Hoje no roteiro</h2>{hoje.map((i) => <Fragment key={i.id}>{Item({ i })}</Fragment>)}</>)}
         {pendentes.length > 0 && <p className="muted">{pendentes.length} reserva(s) com pagamento pendente. Veja em Reservas.</p>}
 
-        <section className="card">
-          <strong>Foto da viagem</strong>
-          <p className="hint">Aparece aqui e em Minhas viagens. {regiaoDaViagem(viagem!) ? `Sem foto sua, usamos a imagem pronta da ${NOME_REGIAO[regiaoDaViagem(viagem!)!]}.` : 'Use uma foto sua ou a do destino.'}</p>
-          <label>Enviar foto (até 10 MB)<input type="file" accept="image/jpeg,image/png,image/heic,image/webp" onChange={trocarCapa} /></label>
-          {regiaoDaViagem(viagem!)
-            ? viagem!.capa_path && <button type="button" className="btn sm" onClick={usarImagemPronta}>Voltar para a imagem pronta</button>
-            : <button type="button" className="btn sm" onClick={buscarFoto}>Usar foto do destino</button>}
-        </section>
       </>
     )
   }
@@ -984,6 +950,47 @@ export default function Viagem({ id }: { id: string }) {
   function Perfil() {
     const p = perfilViagem || {}
     const f = perfil || {}
+    async function trocarCapa(e: ChangeEvent<HTMLInputElement>) {
+      const f = e.target.files?.[0]
+      if (!f) return
+      try {
+        if (!/^image\//.test(f.type)) throw new Error('Escolha uma imagem (JPG, PNG, HEIC ou WEBP).')
+        ok('Enviando foto…')
+        const path = await enviarArquivo(id, f, 'capa-')
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: path })
+        await recarregar(); ok('Foto da viagem atualizada.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+    async function usarImagemPronta() {
+      try {
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_path: null })
+        await recarregar(); ok('Voltamos para a imagem pronta da região.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+    async function buscarFoto() {
+      try {
+        const c = await buscarCapaWikipedia(viagem!.destino || viagem!.titulo)
+        if (!c) { erro('Não encontramos uma foto para este destino. Envie uma foto sua.'); return }
+        await rest('PATCH', `viagens?id=eq.${id}`, { capa_url: c.url, capa_credito: c.credito, capa_path: null })
+        await recarregar(); ok('Foto do destino atualizada.')
+      } catch (err) { erro(erroPt(err)) }
+    }
+
+    const reg = regiaoDaViagem(viagem!)
+    const fotoDaViagem = (
+      <section className="card foto-compacta">
+        <img src={capaDa(viagem!, capas)} alt="" />
+        <div className="foto-compacta-txt">
+          <strong>Foto da viagem</strong>
+          <span className="hint">{viagem!.capa_path ? 'Foto sua' : reg ? `Imagem pronta · ${NOME_REGIAO[reg]}` : 'Foto do destino'}</span>
+          <div className="foto-compacta-acoes">
+            <label className="btn sm">Alterar foto<input type="file" accept="image/jpeg,image/png,image/heic,image/webp" onChange={trocarCapa} hidden /></label>
+            {reg ? viagem!.capa_path && <button type="button" className="btn sm ghost" onClick={usarImagemPronta}>Usar imagem pronta</button>
+              : <button type="button" className="btn sm ghost" onClick={buscarFoto}>Foto do destino</button>}
+          </div>
+        </div>
+      </section>
+    )
     async function salvar(fd: FormData) {
       await rest('POST', 'perfil_viagem?on_conflict=usuario_id', {
         usuario_id: userId(),
@@ -998,6 +1005,7 @@ export default function Viagem({ id }: { id: string }) {
     return (
       <form className="stack" noValidate onSubmit={(e) => enviar(e, salvar, erro, erroPt)}>
         <h1>Seu perfil de viagem</h1>
+        {fotoDaViagem}
         <p className="muted">Destino, datas e quem vai já vêm das suas viagens. Aqui ficam só as suas preferências.</p>
         <label>Como a {NOME_IA} deve te chamar?<input name="nome" maxLength={60} autoComplete="given-name" defaultValue={f.nome || ''} placeholder="Seu nome" /></label>
         <fieldset><legend>O que você mais quer nas viagens?</legend>{Pilulas({ nome: 'objetivos', lista: P_OBJ, marcados: p.objetivos || [], multi: true })}</fieldset>
@@ -1022,14 +1030,13 @@ export default function Viagem({ id }: { id: string }) {
   }
 
   const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, documentos: Documentos, assistente: Assistente, perfil: Perfil }[aba]
-  const abas: [AbaDock, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA]]
+  const abas: [AbaDock, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA], ['perfil', 'Perfil']]
 
   return (
     <div className="tela">
       <header className="top">
         <a className="icon-btn" href="#/viagens" aria-label="Voltar para minhas viagens"><Icone.voltar /></a>
         <h1>{viagem.titulo}</h1>
-        <button type="button" className="icon-btn topo-perfil" onClick={() => irPara('perfil')} aria-label="Seu perfil de viagem" aria-current={aba === 'perfil' ? 'page' : undefined}><Icone.perfil /></button>
       </header>
       <main className="main stack">
         <AvisoBox aviso={aviso} />
