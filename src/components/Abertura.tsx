@@ -19,7 +19,7 @@ const KEY = 'flow.abertura'
 
 // Caminho do voo (num quadro de 400 × 400): entra pela esquerda rente, como numa pista, decola suave e chega ao centro
 const VOO = 'M -60 238 C 40 238 110 238 150 226 C 176 218 186 200 200 200'
-const T_VOO = 1350
+const T_VOO = 950
 
 /** Avisa a tela de viagens que pode abrir o leque. */
 const liberarCartoes = () => {
@@ -119,18 +119,18 @@ export default function Abertura() {
     depois(T_VOO - 120, () => {
       anim(r, [{ opacity: 1 }, { opacity: 0 }], { duration: 600, easing: 'ease-out' })
       anim(aviao.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'ease-in' })
-      anim(marca.current, [{ opacity: 0, transform: 'scale(.92)', filter: 'blur(4px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0)' }], { duration: 700, easing: 'cubic-bezier(.22,1,.36,1)' })
+      anim(marca.current, [{ opacity: 0, transform: 'scale(.92)', filter: 'blur(4px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0)' }], { duration: 500, easing: 'cubic-bezier(.22,1,.36,1)' })
     })
 
     // 3. O "f" desliza para o lado e o nome FLOW aparece
-    depois(T_VOO + 600, () => {
-      anim(nome.current, [{ maxWidth: '0px', clipPath: 'inset(0 100% 0 0)' }, { maxWidth: '200px', clipPath: 'inset(0 0 0 0)' }], { duration: 1000, easing: 'cubic-bezier(.65,0,.35,1)' })
-      anim(nome.current, [{ opacity: 0, letterSpacing: '.9em' }, { opacity: 1, letterSpacing: '.5em' }], { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' })
+    depois(T_VOO + 380, () => {
+      anim(nome.current, [{ maxWidth: '0px', clipPath: 'inset(0 100% 0 0)' }, { maxWidth: '200px', clipPath: 'inset(0 0 0 0)' }], { duration: 720, easing: 'cubic-bezier(.65,0,.35,1)' })
+      anim(nome.current, [{ opacity: 0, letterSpacing: '.9em' }, { opacity: 1, letterSpacing: '.5em' }], { duration: 900, easing: 'cubic-bezier(.22,1,.36,1)' })
     })
 
     // 4. O logo sai e o túnel dos destinos começa
-    depois(T_VOO + 2300, () => {
-      anim(logo.current, [{ opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }, { opacity: 0, transform: 'translate(-50%,-50%) scale(1.08)' }], { duration: 600, easing: 'ease-in' })
+    depois(T_VOO + 1550, () => {
+      anim(logo.current, [{ opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }, { opacity: 0, transform: 'translate(-50%,-50%) scale(1.08)' }], { duration: 420, easing: 'ease-in' })
       setTunel(true)
     })
     return () => { timers.forEach(clearTimeout); cancelAnimationFrame(raf) }
@@ -170,7 +170,7 @@ export default function Abertura() {
             rotulo="Flow · concierge de viagem"
             titulo={<>O MUNDO<br />TE ESPERA.</>}
             subtitulo="Voos, hotéis, roteiro e documentos num só lugar."
-            duracao={7000}
+            duracao={4800}
             aoTerminar={() => setNoFim(true)}
             final={<FimDoTunel viagens={viagens} logada={!!getSessao()} irPara={irPara} />}
           />
