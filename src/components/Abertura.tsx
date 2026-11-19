@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { FLOW_MARK_OURO } from '../lib/marca'
 import PerspectiveTunnelHero from './ui/perspective-tunnel-hero'
+import { VoicePoweredOrb } from './ui/voice-powered-orb'
 import { DESTINOS_TUNEL } from '../lib/destinos-tunel'
 import { getSessao, rest } from '../lib/supabase'
 
@@ -192,6 +193,9 @@ const quando = (iso: string | null) => (iso ? DATA.format(new Date(iso + 'T12:00
 function FimDoTunel({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null; logada: boolean; irPara: (hash: string) => void }) {
   const tem = !!viagens && viagens.length > 0
   return (
+    <>
+    {/* as luzes em volta do círculo: a mesma bola da Lia, do tamanho do círculo (sem microfone) */}
+    <div className="fim-orbe" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={false} /></div>
     <div className="fim-tunel">
       <span className="fim-marca" aria-hidden="true" dangerouslySetInnerHTML={{ __html: FLOW_MARK_OURO }} />
       {tem ? (
@@ -216,5 +220,6 @@ function FimDoTunel({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null
         </>
       )}
     </div>
+    </>
   )
 }
