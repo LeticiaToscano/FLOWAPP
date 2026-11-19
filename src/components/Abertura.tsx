@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { FLOW_MARK_OURO } from '../lib/marca'
+import PerspectiveTunnelHero from './ui/perspective-tunnel-hero'
+import { DESTINOS_TUNEL } from '../lib/destinos-tunel'
 
 const KEY = 'flow.abertura'
 
@@ -8,7 +10,8 @@ const KEY = 'flow.abertura'
    1. fundo preto; um aviãozinho dourado entra voando numa curva e deixa um fio de luz champanhe;
    2. ele pousa no centro e vira o "f" dourado da logo;
    3. o "f" desliza para o lado e o nome FLOW aparece ao lado dele;
-   4. a abertura some e os cartões das viagens entram. Uma vez por sessão. */
+   4. o logo some e começa o túnel: fotos dos destinos mais visitados vêm do fundo na direção da pessoa;
+   5. no fim do túnel (ou em Pular) a abertura some e os cartões das viagens entram. Uma vez por sessão. */
 
 // Caminho do voo (num quadro de 400 × 400): entra pela esquerda rente, como numa pista, decola suave e chega ao centro
 const VOO = 'M -60 238 C 40 238 110 238 150 226 C 176 218 186 200 200 200'
@@ -35,6 +38,8 @@ export default function Abertura() {
   const marca = useRef<HTMLSpanElement>(null)
   const nome = useRef<HTMLSpanElement>(null)
   const encerrou = useRef(false)
+  const logo = useRef<HTMLDivElement>(null)
+  const [tunel, setTunel] = useState(false)
 
   function sumir() {
     if (encerrou.current) return
@@ -50,6 +55,8 @@ export default function Abertura() {
     if (!mostrar) return
     encerrou.current = false
     try { sessionStorage.setItem(KEY, '1') } catch { /* navegação privada */ }
+    // já baixa as fotos do túnel enquanto o logo aparece
+    DESTINOS_TUNEL.forEach((f) => { const i = new Image(); i.decoding = 'async'; i.src = f.src })
     const timers: number[] = []
     const depois = (ms: number, f: () => void) => { timers.push(window.setTimeout(f, ms)) }
     const anim = (el: Element | null, k: Keyframe[], o: KeyframeAnimationOptions) => el?.animate(k, { fill: 'forwards', ...o })
@@ -99,8 +106,11 @@ export default function Abertura() {
       anim(nome.current, [{ opacity: 0, letterSpacing: '.9em' }, { opacity: 1, letterSpacing: '.5em' }], { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' })
     })
 
-    // 4. Some e libera os cartões
-    depois(T_VOO + 2500, sumir)
+    // 4. O logo sai e o túnel dos destinos começa
+    depois(T_VOO + 2300, () => {
+      anim(logo.current, [{ opacity: 1, transform: 'translate(-50%,-50%) scale(1)' }, { opacity: 0, transform: 'translate(-50%,-50%) scale(1.08)' }], { duration: 600, easing: 'ease-in' })
+      setTunel(true)
+    })
     return () => { timers.forEach(clearTimeout); cancelAnimationFrame(raf) }
   }, [mostrar])
 
@@ -131,7 +141,19 @@ export default function Abertura() {
           </g>
         </g>
       </svg>
-      <div className="abertura-logo">
+      {tunel && (
+        <div className="abertura-tunel">
+          <PerspectiveTunnelHero
+            fotos={DESTINOS_TUNEL}
+            rotulo="Flow · concierge de viagem"
+            titulo={<>O MUNDO<br />TE ESPERA.</>}
+            subtitulo="Voos, hotéis, roteiro e documentos num só lugar."
+            duracao={7000}
+            aoTerminar={sumir}
+          />
+        </div>
+      )}
+      <div ref={logo} className="abertura-logo">
         <span ref={marca} className="abertura-marca" dangerouslySetInnerHTML={{ __html: FLOW_MARK_OURO }} />
         <span ref={nome} className="abertura-nome">FLOW</span>
       </div>
