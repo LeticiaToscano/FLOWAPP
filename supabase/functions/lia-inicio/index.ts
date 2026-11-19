@@ -170,10 +170,17 @@ Deno.serve(async (req) => {
       'Responda SEMPRE chamando a ferramenta propor_reservas (mesmo que não encontre nada: lista vazia), sem texto fora dela.',
     ].join('\n')
     await db.from('uso_ia').insert({ tipo: 'reserva' })
-    let d
-    try { d = await claude(chave, { max_tokens: 4000, system: sistema, tools: [FERRAMENTA], tool_choice: { type: 'auto' } /* este modelo não aceita forçar a ferramenta: a instrução pede para usá-la */, messages: [{ role: 'user', content: conteudo }] }) }
-    catch { return responder({ erro: 'A Lia não conseguiu ler agora. Tente de novo em instantes.' }, 502) }
-    const saida = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+    let saida: any
+    try {
+      const primeiras = [{ role: 'user', content: conteudo }]
+      let d = await claude(chave, { max_tokens: 16000, system: sistema, tools: [FERRAMENTA], tool_choice: { type: 'auto' }, messages: primeiras })
+      saida = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+      if (!saida) {
+        console.warn('sem ferramenta', d?.stop_reason, JSON.stringify(d?.content || []).slice(0, 300))
+        d = await claude(chave, { max_tokens: 16000, system: sistema, tools: [FERRAMENTA], tool_choice: { type: 'auto' }, messages: [...primeiras, { role: 'assistant', content: d?.content?.length ? d.content : [{ type: 'text', text: '…' }] }, { role: 'user', content: 'Agora entregue o resultado chamando a ferramenta propor_reservas.' }] })
+        saida = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+      }
+    } catch { return responder({ erro: 'A Lia não conseguiu ler agora. Tente de novo em instantes.' }, 502) }
     if (!saida || !Array.isArray(saida.reservas)) return responder({ erro: 'Não encontrei uma reserva nesse arquivo.' }, 422)
   // Confere e limpa tudo o que veio da IA (só os campos permitidos)
   const reservas = []

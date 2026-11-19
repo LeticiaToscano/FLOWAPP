@@ -140,30 +140,31 @@ Deno.serve(async (req) => {
   // Registra o uso antes de chamar a IA (conta mesmo se a IA falhar, para ninguém forçar repetições)
   await db.from('uso_ia').insert({ viagem_id: viagemId })
 
-  let resposta: Response
-  try {
-    resposta = await fetch('https://api.anthropic.com/v1/messages', {
+  // Chama a IA; se ela responder em texto em vez de usar a ferramenta, pede de novo uma vez (o modelo não aceita forçar)
+  const pedir = async (messages: unknown[]) => {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: MODELO,
-        max_tokens: 8000,
-        system: sistema,
-        tools: [FERRAMENTA],
-        tool_choice: { type: 'auto' } /* este modelo não aceita forçar a ferramenta: a instrução pede para usá-la */,
-        messages: [{ role: 'user', content: 'Dados da viagem (JSON):\n' + JSON.stringify(contexto) }],
-      }),
+      body: JSON.stringify({ model: MODELO, max_tokens: 12000, system: sistema, tools: [FERRAMENTA], tool_choice: { type: 'auto' }, messages }),
     })
-  } catch {
-    return responder({ erro: 'Não foi possível falar com a IA agora. Tente de novo em instantes.' }, 502)
+    if (!r.ok) { console.error('anthropic', r.status, (await r.text()).slice(0, 500)); throw new Error('ia') }
+    return await r.json()
   }
-  if (!resposta.ok) {
-    console.error('anthropic', resposta.status, (await resposta.text()).slice(0, 500))
+  const primeiras = [{ role: 'user', content: 'Dados da viagem (JSON):\n' + JSON.stringify(contexto) }]
+  let uso: any
+  try {
+    let d = await pedir(primeiras)
+    uso = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+    if (!uso) {
+      console.warn('sem ferramenta', d?.stop_reason, JSON.stringify(d?.content || []).slice(0, 300))
+      d = await pedir([...primeiras, { role: 'assistant', content: d?.content?.length ? d.content : [{ type: 'text', text: '…' }] }, { role: 'user', content: 'Agora entregue o resultado chamando a ferramenta propor_roteiro.' }])
+      uso = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+      if (!uso) console.warn('sem ferramenta 2', d?.stop_reason)
+    }
+  } catch {
     return responder({ erro: 'A IA não respondeu agora. Tente de novo em instantes.' }, 502)
   }
 
-  const corpo = await resposta.json()
-  const uso = corpo?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
   if (!uso || !Array.isArray(uso.itens)) return responder({ erro: 'A IA devolveu um roteiro incompleto. Tente de novo.' }, 502)
 
   // Confere tudo o que veio da IA antes de devolver

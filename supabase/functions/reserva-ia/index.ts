@@ -169,29 +169,31 @@ Deno.serve(async (req) => {
 
   await db.from('uso_ia').insert({ viagem_id: viagemId, tipo: 'reserva' })
 
-  let resposta: Response
-  try {
-    resposta = await fetch('https://api.anthropic.com/v1/messages', {
+  // Chama a IA; se ela responder em texto em vez de usar a ferramenta, pede de novo uma vez (o modelo não aceita forçar)
+  const pedir = async (messages: unknown[]) => {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: MODELO,
-        max_tokens: 8000,
-        system: sistema,
-        tools: [FERRAMENTA],
-        tool_choice: { type: 'auto' } /* este modelo não aceita forçar a ferramenta: a instrução pede para usá-la */,
-        messages: [{ role: 'user', content: conteudo }],
-      }),
+      body: JSON.stringify({ model: MODELO, max_tokens: 16000, system: sistema, tools: [FERRAMENTA], tool_choice: { type: 'auto' }, messages }),
     })
-  } catch {
-    return responder({ erro: 'Não consegui falar com a IA agora. Tente de novo em instantes.' }, 502)
+    if (!r.ok) { console.error('anthropic', r.status, (await r.text()).slice(0, 500)); throw new Error('ia') }
+    return await r.json()
   }
-  if (!resposta.ok) {
-    console.error('anthropic', resposta.status, (await resposta.text()).slice(0, 500))
+  const primeiras = [{ role: 'user', content: conteudo }]
+  let saida: any
+  try {
+    let d = await pedir(primeiras)
+    saida = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+    if (!saida) {
+      console.warn('sem ferramenta', d?.stop_reason, JSON.stringify(d?.content || []).slice(0, 300))
+      d = await pedir([...primeiras, { role: 'assistant', content: d?.content?.length ? d.content : [{ type: 'text', text: '…' }] }, { role: 'user', content: 'Agora entregue o resultado chamando a ferramenta propor_reservas.' }])
+      saida = d?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
+      if (!saida) console.warn('sem ferramenta 2', d?.stop_reason)
+    }
+  } catch {
     return responder({ erro: 'A Lia não conseguiu ler agora. Tente de novo em instantes.' }, 502)
   }
 
-  const saida = (await resposta.json())?.content?.find((c: { type: string }) => c.type === 'tool_use')?.input
   if (!saida || !Array.isArray(saida.reservas)) return responder({ erro: 'Não encontrei uma reserva nesse arquivo.' }, 422)
 
   // Confere e limpa tudo o que veio da IA (só os campos permitidos)
