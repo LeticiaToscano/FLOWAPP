@@ -3,6 +3,7 @@ import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { CirculoInicio, ordenarViagens } from '../components/inicio-circulo'
 import { NovaTripCard, TripCard } from '../components/ui/trip-card'
 import { fmtData } from '../lib/tempo'
+import { capaDaRegiao, NOME_REGIAO, regiaoDaViagem } from '../lib/regioes'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
 import { authReq, baixarArquivo, getSessao, rest, setSessao, userId } from '../lib/supabase'
 import { buscarCapaWikipedia, capaPadrao } from '../lib/capa'
@@ -104,13 +105,14 @@ export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; 
           <div className="trip-cards">
             {carregado && ordenarViagens(viagens).map((v) => {
               const d = dias(v)
-              const tipo = v.tipo === 'nacional' ? 'Nacional' : 'Internacional'
+              const reg = regiaoDaViagem(v)
+              const tipo = reg ? NOME_REGIAO[reg] : v.tipo === 'nacional' ? 'Nacional' : 'Internacional'
               const quando = v.fim && v.fim < hoje ? 'Já aconteceu' : v.inicio && v.inicio <= hoje ? 'Acontecendo agora' : null
               return (
                 <TripCard
                   key={v.id}
                   href={`#/viagem/${v.id}`}
-                  imagem={capaDa(v, capas)}
+                  imagem={capas[v.id] || capaDaRegiao(v) || capaDa(v, capas)}
                   imagemAlt={`Foto de ${v.destino || v.titulo}`}
                   rotulo={[tipo, d ? `${d} ${d === 1 ? 'dia' : 'dias'}` : null, quando].filter(Boolean).join(' · ')}
                   titulo={v.titulo}
