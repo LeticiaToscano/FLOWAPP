@@ -13,11 +13,12 @@
 // - Limite de 20 leituras por pessoa a cada 24 h (tabela uso_ia, tipo 'reserva').
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 
 const ORIGENS = ['https://flowapp-virid.vercel.app', 'http://localhost:5173']
 const LIMITE_DIA = 20
 const MODELO = 'claude-sonnet-5-5'
-const MAX_BYTES = 10 * 1024 * 1024
+const MAX_BYTES = 20 * 1024 * 1024 // a API da Anthropic aceita até 32 MB por pedido (o base64 cresce ~1/3)
 
 function cors(origem: string | null) {
   const ok = origem && ORIGENS.includes(origem) ? origem : ORIGENS[0]
@@ -133,11 +134,9 @@ Deno.serve(async (req) => {
   if (path) {
     const { data: arq, error } = await db.storage.from('comprovantes').download(path)
     if (error || !arq) return responder({ erro: 'Não consegui abrir o arquivo.' }, 404)
-    if (arq.size > MAX_BYTES) return responder({ erro: 'Arquivo maior que 10 MB.' }, 400)
+    if (arq.size > MAX_BYTES) return responder({ erro: 'Arquivo maior que 20 MB. Mande só as páginas das reservas ou prints delas.' }, 400)
     const bytes = new Uint8Array(await arq.arrayBuffer())
-    let bin = ''
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-    const b64 = btoa(bin)
+    const b64 = encodeBase64(bytes)
     const nome = path.toLowerCase()
     const tipo = arq.type || ''
     if (tipo === 'application/pdf' || nome.endsWith('.pdf')) {
@@ -156,6 +155,7 @@ Deno.serve(async (req) => {
 
   const sistema = [
     'Você é a Lia, concierge do Flow. Sua tarefa agora é LER comprovantes de reserva (voo, hotel, trem, carro, passeio, restaurante) e extrair os dados para o app.',
+    '- O arquivo pode ser um guia ou um PDF com várias reservas juntas (e também roteiro, dicas etc.): extraia SÓ as reservas de fato (com empresa, data e, se houver, código), uma por item, e ignore sugestões e dicas.',
     'Regras:',
     '- Uma reserva por trecho: voo com conexão = um item por voo; ida e volta = itens separados.',
     '- Horários sempre no horário LOCAL de cada lugar, com o fuso IANA correto do lugar (saída e chegada podem ter fusos diferentes).',
@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
       headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODELO,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: sistema,
         tools: [FERRAMENTA],
         tool_choice: { type: 'tool', name: 'propor_reservas' },
@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
 
   // Confere e limpa tudo o que veio da IA (só os campos permitidos)
   const reservas = []
-  for (const r of saida.reservas.slice(0, 20)) {
+  for (const r of saida.reservas.slice(0, 40)) {
     const tipo = TIPOS.includes(r?.tipo) ? r.tipo : 'outro'
     const fi = fusoOk(r?.fuso_inicio)
     const ff = fusoOk(r?.fuso_fim) || fi

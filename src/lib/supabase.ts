@@ -4,7 +4,7 @@
 export const SUPA_URL = 'https://hhitkbgzyrfhxstxonej.supabase.co'
 export const SUPA_KEY = 'sb_publishable_6RPyLtVK6h_uh2AfQ8hs7g__b-H1uhG'
 const SESSION_KEY = 'flow.session'
-const MAX_FILE = 10 * 1024 * 1024
+const MAX_FILE = 20 * 1024 * 1024
 
 export type Sessao = {
   access_token: string
@@ -83,7 +83,7 @@ const caminho = (p: string) => p.split('/').map(encodeURIComponent).join('/')
 
 /** Envia um arquivo para o cofre privado, em <id da viagem>/<arquivo>. */
 export async function enviarArquivo(viagemId: string, file: File, prefixo = '') {
-  if (file.size > MAX_FILE) throw new Error('Arquivo maior que 10 MB.')
+  if (file.size > MAX_FILE) throw new Error('Arquivo maior que 20 MB. Mande só as páginas das reservas ou prints delas.')
   const nome = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_').slice(-80)
   const path = `${viagemId}/${prefixo}${crypto.randomUUID()}-${nome}`
   const token = await getToken()

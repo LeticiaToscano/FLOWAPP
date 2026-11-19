@@ -366,7 +366,7 @@ export default function Viagem({ id }: { id: string }) {
             {r.comprovante_path
               ? <button type="button" className="btn sm" onClick={() => abrirArquivo(r.comprovante_path, erro)}>Abrir comprovante</button>
               : <span className="muted">Nenhum comprovante anexado.</span>}
-            <label>Anexar PDF ou foto (até 10 MB)<input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/webp" onChange={anexar} /></label>
+            <label>Anexar PDF ou foto (até 20 MB)<input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/webp" onChange={anexar} /></label>
           </section>
         ) : <p className="hint">Depois de salvar, você poderá anexar o comprovante.</p>}
         <button className="btn primary" type="submit">{novo ? 'Salvar reserva' : 'Salvar alterações'}</button>
@@ -588,7 +588,7 @@ export default function Viagem({ id }: { id: string }) {
     try {
       let path: string | null = null
       if (arquivo) {
-        if (arquivo.size > 10 * 1024 * 1024) throw new Error('Arquivo maior que 10 MB.')
+        if (arquivo.size > 20 * 1024 * 1024) throw new Error('Esse arquivo passa de 20 MB. Mande só as páginas das reservas, ou prints delas, que eu leio.')
         path = await enviarArquivo(id, arquivo, 'reserva-')
       }
       const d = await chamarIA<{ resumo: string; reservas: ReservaLida[]; viagem: PropostaReservas['viagem'] }>('reserva-ia', { viagem_id: id, path, texto: textoColado || undefined })
