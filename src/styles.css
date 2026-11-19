@@ -322,3 +322,24 @@ s{color:var(--muted)}
 .tunel-foto img{display:block;width:100%;height:100%;object-fit:cover}
 .tunel-legenda{position:absolute;inset:0;display:flex;align-items:flex-end;padding:14px 16px;background:linear-gradient(to top,rgba(0,0,0,.8),rgba(0,0,0,.1) 45%,transparent)}
 .tunel-legenda span{font-size:12px;font-weight:500;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.95);text-shadow:0 1px 4px rgba(0,0,0,.6)}
+
+/* Fim do túnel: o círculo cresce e recebe "Comece sua viagem" / as próximas viagens */
+.tunel .tunel-anel{transition:width 1.1s cubic-bezier(.22,1,.36,1),height 1.1s cubic-bezier(.22,1,.36,1),border-color 1.1s ease,box-shadow 1.1s ease,opacity .8s ease}
+.tunel-fim .tunel-anel:not(.tunel-anel-2){width:min(86vw,74vh,440px);height:min(86vw,74vh,440px);border-color:rgba(226,209,168,.38);box-shadow:0 0 80px rgba(226,209,168,.10),inset 0 0 60px rgba(226,209,168,.06)}
+.tunel-fim .tunel-anel-2{width:min(100vw,92vh,560px);height:min(100vw,92vh,560px);opacity:.6}
+.tunel-fim .tunel-dica{display:none}
+.tunel-final{position:absolute;inset:0;z-index:30;display:grid;place-items:center;pointer-events:none}
+.fim-tunel{pointer-events:auto;width:min(70vw,58vh,330px);display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;animation:fim-chega 1s .35s cubic-bezier(.22,1,.36,1) both}
+@keyframes fim-chega{from{opacity:0;transform:translateY(10px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+.fim-marca{display:block;width:34px;height:34px}
+.fim-marca svg{display:block;width:100%;height:100%}
+.fim-tunel h2{margin:0;font-family:var(--sans);font-size:clamp(26px,7vw,34px);font-weight:300;letter-spacing:-.01em;text-transform:none;line-height:1.1;color:#fff}
+.fim-comecar{margin-top:6px;min-height:48px;padding:0 30px;border:0;border-radius:999px;background:linear-gradient(135deg,#F5E9CC,#E2D1A8 45%,#B89A5E);color:#111;font:inherit;font-size:15px;font-weight:600;letter-spacing:.02em;cursor:pointer;box-shadow:0 10px 30px rgba(226,209,168,.18)}
+.fim-comecar:hover{filter:brightness(1.06)}
+.fim-lista{width:100%;display:flex;flex-direction:column;gap:8px}
+.fim-viagem{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:46px;padding:0 16px;border-radius:14px;border:1px solid rgba(226,209,168,.28);background:rgba(20,20,20,.75);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#fff;font:inherit;cursor:pointer;text-align:left}
+.fim-viagem:hover{border-color:rgba(226,209,168,.6)}
+.fim-viagem-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:500}
+.fim-viagem-data{flex:none;font-size:12.5px;color:var(--gold)}
+.fim-nova{background:none;border:0;color:var(--gold);font:inherit;font-size:14px;font-weight:500;cursor:pointer;padding:6px 10px}
+.fim-comecar:focus-visible,.fim-viagem:focus-visible,.fim-nova:focus-visible{outline:2px solid var(--gold);outline-offset:3px}

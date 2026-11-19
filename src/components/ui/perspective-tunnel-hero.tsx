@@ -26,7 +26,7 @@ const mapa = (v: number, de: number[], para: number[]) => {
 }
 
 export default function PerspectiveTunnelHero({
-  fotos, rotulo, titulo, subtitulo, duracao = 7000, aoTerminar,
+  fotos, rotulo, titulo, subtitulo, duracao = 7000, aoTerminar, final,
 }: {
   fotos: FotoTunel[]
   rotulo?: string
@@ -35,7 +35,10 @@ export default function PerspectiveTunnelHero({
   /** Tempo do voo automático, do começo ao fim (ms). */
   duracao?: number
   aoTerminar?: () => void
+  /** O que aparece dentro do círculo quando todas as fotos já passaram (o túnel para ali). */
+  final?: React.ReactNode
 }) {
+  const [noFim, setNoFim] = useState(false)
   const raiz = useRef<HTMLDivElement>(null)
   const cartoes = useRef<(HTMLDivElement | null)[]>([])
   const tituloRef = useRef<HTMLDivElement>(null)
@@ -62,11 +65,11 @@ export default function PerspectiveTunnelHero({
     let ultimo = performance.now()
     let raf = 0
 
-    const roda = (e: WheelEvent) => { e.preventDefault(); alvo = Math.min(1, Math.max(0, alvo + e.deltaY * 0.0008)) }
+    const roda = (e: WheelEvent) => { e.preventDefault(); if (terminou) return; alvo = Math.min(1, Math.max(0, alvo + e.deltaY * 0.0008)) }
     let toqueY: number | null = null
     const tIni = (e: TouchEvent) => { toqueY = e.touches[0].clientY }
     const tMov = (e: TouchEvent) => {
-      if (toqueY == null) return
+      if (toqueY == null || terminou) return
       const y = e.touches[0].clientY
       alvo = Math.min(1, Math.max(0, alvo + (toqueY - y) * 0.0025))
       toqueY = y
@@ -113,7 +116,7 @@ export default function PerspectiveTunnelHero({
       }
       if (dicaRef.current) dicaRef.current.style.opacity = String(mapa(prog, [0, 0.12], [1, 0]))
 
-      if (!terminou && prog > 0.985) { terminou = true; fim.current?.() }
+      if (!terminou && prog > 0.985) { terminou = true; alvo = 1; setNoFim(true); fim.current?.() }
       raf = requestAnimationFrame(quadro)
     }
     raf = requestAnimationFrame(quadro)
@@ -129,7 +132,7 @@ export default function PerspectiveTunnelHero({
   const larg = palco.cel ? Math.max(130, Math.min(180, palco.w * 0.38)) : Math.max(180, Math.min(270, palco.w * 0.18))
 
   return (
-    <div ref={raiz} className="tunel" style={{ perspective: palco.cel ? '900px' : '1200px' }}>
+    <div ref={raiz} className={'tunel' + (noFim ? ' tunel-fim' : '')} style={{ perspective: palco.cel ? '900px' : '1200px' }}>
       <div className="tunel-grade" aria-hidden="true" />
       <div className="tunel-brilho" aria-hidden="true" />
       <div className="tunel-anel" aria-hidden="true" />
@@ -145,6 +148,8 @@ export default function PerspectiveTunnelHero({
         <span>Deslize para explorar</span>
         <i />
       </div>
+
+      {final && <div className="tunel-final" aria-hidden={!noFim}>{noFim && final}</div>}
 
       <div className="tunel-plano">
         {lista.map((c, k) => (
