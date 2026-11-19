@@ -393,3 +393,18 @@ s{color:var(--muted)}
 .foto-compacta-acoes label.btn{cursor:pointer;display:inline-flex;align-items:center}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--gold)}
 .card.foto-compacta{flex-direction:row;align-items:center;text-align:left}.card.foto-compacta .foto-compacta-txt{align-items:flex-start}
+
+/* Lia lendo reservas: cartões para confirmar */
+.cci-clipe{cursor:pointer}
+.lia-propostas{display:flex;flex-direction:column;gap:10px;max-width:520px;width:100%;align-self:flex-start;animation:lia-chega .5s ease both}
+.lia-prop{border:1px solid rgba(226,209,168,.28);border-radius:14px;background:#111;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.lia-prop.feita-ok{border-color:rgba(120,200,140,.4)}
+.lia-prop.feita-ignorada{opacity:.55}
+.lia-prop-topo{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lia-prop-topo strong{font-size:15px}
+.lia-prop-cod{margin-left:auto;font-size:12.5px;letter-spacing:.08em;color:var(--gold)}
+.lia-prop-linha{font-size:14px}
+.lia-prop-duvida{font-size:13px;color:#F2C98A;background:rgba(242,201,138,.08);border-radius:8px;padding:6px 8px}
+.lia-prop-acoes{display:flex;gap:8px;align-items:center;margin-top:2px}
+.lia-prop-ok{color:#8FD3A1;font-size:13.5px;font-weight:600}
+.lia-prop-todas{align-self:stretch}

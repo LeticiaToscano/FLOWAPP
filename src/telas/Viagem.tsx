@@ -15,7 +15,15 @@ import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada
 
 type Row = Record<string, any>
 type Aba = 'hoje' | 'reservas' | 'roteiro' | 'documentos' | 'assistente' | 'perfil'
-type Msg = { papel: 'eu' | 'assistente'; texto: string; antiga?: boolean }
+type ReservaLida = {
+  tipo: string; fornecedor: string | null; codigo_reserva: string | null; numero_bilhete: string | null
+  origem: string | null; destino: string | null; endereco: string | null; terminal: string | null; assentos: string | null; bagagem: string | null
+  inicio_local: string | null; fuso_inicio: string; fim_local: string | null; fuso_fim: string
+  valor: number | null; moeda: string | null; status_pagamento: string | null; vence_em: string | null
+  cancelamento_gratis_ate_local: string | null; duvida: string | null
+}
+type PropostaReservas = { reservas: ReservaLida[]; viagem: { destino: string | null; inicio: string | null; fim: string | null }; path: string | null; feitas: Record<number, 'ok' | 'ignorada' | 'erro'> }
+type Msg = { papel: 'eu' | 'assistente'; texto: string; antiga?: boolean; proposta?: PropostaReservas }
 type ConversaLia = { id: string; titulo: string; atualizado_em: string }
 
 /** Nome da concierge de IA do Flow (aparece na aba, no chat e nas respostas). */
@@ -462,9 +470,90 @@ export default function Viagem({ id }: { id: string }) {
 
 
   /** voz: a Lia responde em voz alta — só no modo "Falar com a Lia" (conversa). Por escrito, responde em texto. */
+  /** A pessoa mandou um comprovante (ou colou o texto): a Lia lê e propõe as reservas, para a pessoa confirmar. */
+  async function lerReserva(arquivo: File | null, textoColado?: string) {
+    if (carregandoRef.current) return
+    const rotulo = arquivo ? `Enviei: ${arquivo.name}` : textoColado!.slice(0, 280) + (textoColado!.length > 280 ? '…' : '')
+    const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: rotulo }]
+    chatRef.current = nova; carregandoRef.current = true
+    setChat(nova); setTexto(''); setChatCarregando(true); setAviso(null)
+    try {
+      let path: string | null = null
+      if (arquivo) {
+        if (arquivo.size > 10 * 1024 * 1024) throw new Error('Arquivo maior que 10 MB.')
+        path = await enviarArquivo(id, arquivo, 'reserva-')
+      }
+      const d = await chamarIA<{ resumo: string; reservas: ReservaLida[]; viagem: PropostaReservas['viagem'] }>('reserva-ia', { viagem_id: id, path, texto: textoColado || undefined })
+      const n = d.reservas.length
+      const txt = n
+        ? `${(d.resumo || `Encontrei ${n} ${n === 1 ? 'reserva' : 'reservas'}`).replace(/[.!]?\s*$/, '.')} Confira e toque em adicionar que eu organizo tudo na viagem.`
+        : 'Não encontrei uma reserva nesse arquivo. Se puder, mande o PDF ou um print mais nítido.'
+      chatRef.current = [...nova, { papel: 'assistente', texto: txt, proposta: n ? { reservas: d.reservas, viagem: d.viagem, path, feitas: {} } : undefined }]
+      setChat(chatRef.current)
+      void guardarNoHistorico(rotulo, txt)
+    } catch (e) {
+      chatRef.current = [...nova, { papel: 'assistente', texto: e instanceof Error ? e.message : 'Não consegui ler agora.' }]
+      setChat(chatRef.current)
+    } finally {
+      carregandoRef.current = false; setChatCarregando(false)
+    }
+  }
+
+  /** Grava as reservas que a pessoa confirmou (todas ou uma) e completa a viagem se faltar destino ou datas. */
+  async function adicionarReservas(msgIdx: number, quais: number[]) {
+    const m = chatRef.current[msgIdx]
+    if (!m?.proposta) return
+    const feitas = { ...m.proposta.feitas }
+    let ok = 0
+    for (const k of quais) {
+      if (feitas[k]) continue
+      const r = m.proposta.reservas[k]
+      const body: Row = {
+        viagem_id: id, tipo: r.tipo, fornecedor: r.fornecedor, codigo_reserva: r.codigo_reserva, numero_bilhete: r.numero_bilhete,
+        origem: r.origem, destino: r.destino, terminal: r.terminal, assentos: r.assentos, bagagem: r.bagagem,
+        inicio: localParaUtc(r.inicio_local, r.fuso_inicio), fuso_inicio: r.fuso_inicio,
+        fim: localParaUtc(r.fim_local, r.fuso_fim), fuso_fim: r.fuso_fim,
+        valor: r.valor, moeda: r.moeda || (r.valor != null ? 'BRL' : null), vence_em: r.vence_em,
+        cancelamento_gratis_ate: localParaUtc(r.cancelamento_gratis_ate_local, r.fuso_inicio),
+        confirmada: true, precisa_revisao: !!r.duvida, comprovante_path: m.proposta.path,
+      }
+      if (r.status_pagamento) body.status_pagamento = r.status_pagamento
+      Object.keys(body).forEach((c) => { if (body[c] == null) delete body[c] })
+      try {
+        try { await rest('POST', 'reservas', { ...body, fonte: 'ia' }, 'return=minimal') }
+        catch (e) { if (/fonte|check constraint|violates/i.test(String(e))) await rest('POST', 'reservas', { ...body, fonte: 'manual' }, 'return=minimal'); else throw e }
+        feitas[k] = 'ok'; ok++
+      } catch (e) {
+        feitas[k] = 'erro'
+        erro(/duplicate|sem_duplicar/i.test(String(e)) ? 'Essa reserva já está na viagem.' : erroPt(e))
+      }
+    }
+    // Completa a viagem só onde estiver vazio (destino e datas)
+    const v = m.proposta.viagem
+    const patch: Row = {}
+    if (viagem && !viagem.destino && v.destino) patch.destino = v.destino
+    if (viagem && !viagem.inicio && v.inicio) patch.inicio = v.inicio
+    if (viagem && !viagem.fim && v.fim) patch.fim = v.fim
+    if (ok && Object.keys(patch).length) { try { await rest('PATCH', `viagens?id=eq.${id}`, patch, 'return=minimal') } catch { /* só o dono altera a viagem */ } }
+    const lista = [...chatRef.current]
+    lista[msgIdx] = { ...m, proposta: { ...m.proposta, feitas } }
+    if (ok) lista.push({ papel: 'assistente', texto: ok === 1 ? 'Pronto, adicionei à viagem. Já aparece em Reservas e no seu dia. Pode mandar a próxima!' : `Pronto, adicionei ${ok} reservas à viagem. Já aparecem em Reservas e no seu dia. Pode mandar a próxima!` })
+    chatRef.current = lista; setChat(lista)
+    if (ok) await recarregar()
+  }
+
+  function ignorarReserva(msgIdx: number, k: number) {
+    const m = chatRef.current[msgIdx]
+    if (!m?.proposta) return
+    const lista = [...chatRef.current]
+    lista[msgIdx] = { ...m, proposta: { ...m.proposta, feitas: { ...m.proposta.feitas, [k]: 'ignorada' } } }
+    chatRef.current = lista; setChat(lista)
+  }
+
   async function perguntar(texto: string, voz = false) {
     const t = texto.trim()
     if (!t || carregandoRef.current) return
+    if (!voz && t.length > 280 && /(localizador|c[oó]digo da reserva|reserva|booking|check-?in|confirma[cç][aã]o|e-?ticket|bilhete|itiner)/i.test(t)) { void lerReserva(null, t); return }
     const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: t }]
     reconhecedor.current?.abort?.()
     chatRef.current = nova; carregandoRef.current = true
@@ -648,6 +737,12 @@ export default function Viagem({ id }: { id: string }) {
     const destino = viagem?.destino ? ` para ${viagem.destino}` : ''
     const vazia = !chat.length
 
+    const clipe = (
+      <label className="cci-ferr cci-clipe" aria-label="Mandar uma reserva (PDF ou foto)" title="Mandar reserva (PDF ou foto)" onClick={(e) => e.stopPropagation()}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+        <input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp,.eml,.txt" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerReserva(f) }} />
+      </label>
+    )
     const microfone = Reconhecimento ? (
       <>
       <button type="button" className={'cci-ferr' + (ouvindo && !conversa ? ' ativo' : '')} onClick={(e) => { e.stopPropagation(); if (!conversa) ouvir() }} aria-label={ouvindo ? 'Parar de ouvir' : 'Falar a pergunta'} aria-pressed={ouvindo}>
@@ -676,8 +771,8 @@ export default function Viagem({ id }: { id: string }) {
           onChange={setTexto}
           onSend={() => perguntar(texto)}
           disabled={chatCarregando}
-          placeholder={conversa ? (chatCarregando ? 'Pensando…' : falando ? 'Falando…' : 'Pode falar, estou ouvindo…') : ouvindo ? 'Pode falar, estou ouvindo…' : `Como posso ajudar na sua viagem${destino}?`}
-          ferramentas={microfone}
+          placeholder={conversa ? (chatCarregando ? 'Pensando…' : falando ? 'Falando…' : 'Pode falar, estou ouvindo…') : ouvindo ? 'Pode falar, estou ouvindo…' : chat.length ? `Como posso ajudar na sua viagem${destino}?` : 'Pergunte algo ou mande suas reservas no clipe'}
+          ferramentas={<>{clipe}{microfone}</>}
         />
       </HandoffBeam>
     )
@@ -762,7 +857,7 @@ export default function Viagem({ id }: { id: string }) {
             </form>
           )}
           <p className="lia-apres">{visita === 'ola' || !SAUDACOES[visita]
-            ? <>Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Conheço suas reservas, seu roteiro e seus documentos{destino}.</>
+            ? <>Que {saudacao}! Eu sou a {NOME_IA}, sua concierge. Me mande suas reservas (PDF, print ou o texto do e-mail) no clipe que eu monto a viagem para você.</>
             : SAUDACOES[visita].apres}</p>
           {caixa}
           <p className="lia-aviso">A {NOME_IA} pode errar. Confira informações importantes. Nada muda na viagem sem o seu sim.</p>
@@ -786,9 +881,12 @@ export default function Viagem({ id }: { id: string }) {
             m.papel === 'eu'
               ? <div key={n} className="msg minha">{m.texto}</div>
               : (
-                <div key={n} className="msg dela lia-resposta">
+                <Fragment key={n}>
+                <div className="msg dela lia-resposta">
                   {m.antiga ? m.texto : m.texto.split(/(\s+)/).map((p, i) => (/^\s+$/.test(p) ? p : <span key={i} className="lia-palavra" style={{ animationDelay: `${Math.min(i * 22, 1600)}ms` }}>{p}</span>))}
                 </div>
+                {m.proposta && <PropostaCartoes m={m} idx={n} />}
+                </Fragment>
               ),
           )}
           {chatCarregando && <OrbePensando />}
@@ -802,6 +900,37 @@ export default function Viagem({ id }: { id: string }) {
     )
   }
 
+
+  function PropostaCartoes({ m, idx }: { m: Msg; idx: number }) {
+    const p = m.proposta!
+    const pendentes = p.reservas.map((_, k) => k).filter((k) => !p.feitas[k])
+    const quando = (l: string | null) => (l ? new Date(l + ':00').toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'sem data')
+    return (
+      <div className="lia-propostas">
+        {p.reservas.map((r, k) => (
+          <div key={k} className={'lia-prop' + (p.feitas[k] ? ' feita-' + p.feitas[k] : '')}>
+            <div className="lia-prop-topo">
+              <span className="chip">{tipoNome(r.tipo)}</span>
+              <strong>{r.fornecedor || tipoNome(r.tipo)}</strong>
+              {r.codigo_reserva && <span className="lia-prop-cod">{r.codigo_reserva}</span>}
+            </div>
+            {(r.origem || r.destino) && <div className="lia-prop-linha">{r.tipo === 'hotel' ? [r.origem, r.destino].filter(Boolean).join(' · ') : [r.origem, r.destino].filter(Boolean).join(' → ')}</div>}
+            <div className="lia-prop-linha soft">{r.tipo === 'hotel' ? `Check-in ${quando(r.inicio_local)}${r.fim_local ? ` · Check-out ${quando(r.fim_local)}` : ''}` : `${quando(r.inicio_local)}${r.fim_local ? ` → ${quando(r.fim_local)}` : ''}`}</div>
+            {r.duvida && <div className="lia-prop-duvida">Confira: {r.duvida}</div>}
+            <div className="lia-prop-acoes">
+              {p.feitas[k] === 'ok' ? <span className="lia-prop-ok">Adicionada ✓</span>
+                : p.feitas[k] === 'ignorada' ? <span className="soft">Ignorada</span>
+                  : <>
+                    <button type="button" className="btn sm primary" onClick={() => void adicionarReservas(idx, [k])}>Adicionar</button>
+                    <button type="button" className="btn sm ghost" onClick={() => ignorarReserva(idx, k)}>Ignorar</button>
+                  </>}
+            </div>
+          </div>
+        ))}
+        {pendentes.length > 1 && <button type="button" className="btn primary lia-prop-todas" onClick={() => void adicionarReservas(idx, pendentes)}>Adicionar todas à viagem</button>}
+      </div>
+    )
+  }
 
   async function pedirRoteiroIA() {
     destravarVoz()
