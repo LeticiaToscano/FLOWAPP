@@ -35,14 +35,16 @@ export function CirculoInicio({ viagens, logada, irPara }: { viagens: ViagemCurt
           <button type="button" className="fim-nova fim-ver" onClick={() => irPara('#/minhas')}>
             {lista.length > 3 ? `Ver todas as viagens (${lista.length})` : 'Ver minhas viagens'}
           </button>
+          <button type="button" className="fim-lia" onClick={() => irPara('#/lia')}><span className="fim-lia-orbe" aria-hidden="true" />Falar com a Lia</button>
           <button type="button" className="fim-nova" onClick={() => irPara('#/nova')}>+ Começar uma nova</button>
         </>
       ) : (
         <>
           <h2>Comece sua<br />viagem</h2>
-          <button type="button" className="fim-comecar" onClick={() => irPara(logada ? '#/nova' : '')}>
-            {logada ? 'Começar' : 'Entrar e começar'}
+          <button type="button" className="fim-comecar" onClick={() => irPara(logada ? '#/lia' : '')}>
+            {logada ? 'Começar com a Lia' : 'Entrar e começar'}
           </button>
+          {logada && <button type="button" className="fim-nova" onClick={() => irPara('#/nova')}>ou criar sozinha</button>}
         </>
       )}
     </div>

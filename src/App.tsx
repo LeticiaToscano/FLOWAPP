@@ -5,6 +5,7 @@ import Entrar from './telas/Entrar'
 import NovaSenha from './telas/NovaSenha'
 import Viagens from './telas/Viagens'
 import Viagem from './telas/Viagem'
+import LiaInicio from './telas/LiaInicio'
 import { authReq, getSessao, getToken, onSessao, setSessao, type Sessao } from './lib/supabase'
 
 /* Rotas pelo endereço (#/viagens = círculo, #/minhas = Minhas viagens, #/nova, #/viagem/<id>). O link de confirmação do Supabase volta com
@@ -60,7 +61,7 @@ export default function App() {
   else if (!sessao) tela = <Entrar avisoInicial={aviso} />
   else {
     const m = rota.match(/^#\/viagem\/([0-9a-f-]{36})/)
-    tela = m ? <Viagem key={m[1]} id={m[1]} /> : <Viagens nova={rota === '#/nova'} lista={rota === '#/minhas'} avisoInicial={aviso} />
+    tela = m ? <Viagem key={m[1]} id={m[1]} /> : rota === '#/lia' ? <LiaInicio /> : <Viagens nova={rota === '#/nova'} lista={rota === '#/minhas'} avisoInicial={aviso} />
   }
 
   return (
