@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
-import { CirculoInicio } from '../components/inicio-circulo'
+import { CirculoInicio, ordenarViagens } from '../components/inicio-circulo'
+import { NovaTripCard, TripCard } from '../components/ui/trip-card'
+import { fmtData } from '../lib/tempo'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
 import { authReq, baixarArquivo, getSessao, rest, setSessao, userId } from '../lib/supabase'
 import { buscarCapaWikipedia, capaPadrao } from '../lib/capa'
@@ -39,10 +41,11 @@ export function useCapas(viagens: ViagemRow[]) {
 
 export const capaDa = (v: ViagemRow, capas: Record<string, string>) => capas[v.id] || v.capa_url || capaPadrao(v.titulo)
 
-export default function Viagens({ nova, avisoInicial }: { nova: boolean; avisoInicial: Aviso }) {
+export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; lista?: boolean; avisoInicial: Aviso }) {
   const [viagens, setViagens] = useState<ViagemRow[]>([])
   const [carregado, setCarregado] = useState(false)
   const [aviso, setAviso] = useState<Aviso>(avisoInicial)
+  const capas = useCapas(viagens)
   // Com a abertura na tela, a luz do círculo de baixo só liga quando ela termina (uma luz por vez).
   const [liberado, setLiberado] = useState(() => !(window as any).__flowAbertura)
   useEffect(() => {
@@ -80,6 +83,52 @@ export default function Viagens({ nova, avisoInicial }: { nova: boolean; avisoIn
     try { if (s) await authReq('logout', undefined, { token: s.access_token }) } catch { /* sai mesmo assim */ }
     setSessao(null)
     window.location.hash = ''
+  }
+
+  // Minhas viagens: cards com a foto, o nome, o destino e as datas, mais o card de criar uma nova
+  if (lista) {
+    const dias = (v: ViagemRow) => (v.inicio && v.fim ? Math.round((+new Date(v.fim) - +new Date(v.inicio)) / 864e5) + 1 : null)
+    const hoje = new Date().toISOString().slice(0, 10)
+    return (
+      <div className="viagens">
+        <header className="viagens-topo">
+          <a className="icon-btn" href="#/viagens" aria-label="Voltar ao início">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          </a>
+          <h1>Minhas viagens</h1>
+          <button type="button" className="btn sm" onClick={sair}>Sair</button>
+        </header>
+        <div className="viagens-base viagens-base-larga">
+          <AvisoBox aviso={aviso} />
+          {!carregado && <p className="muted">Carregando suas viagens…</p>}
+          <div className="trip-cards">
+            {carregado && ordenarViagens(viagens).map((v) => {
+              const d = dias(v)
+              const tipo = v.tipo === 'nacional' ? 'Nacional' : 'Internacional'
+              const quando = v.fim && v.fim < hoje ? 'Já aconteceu' : v.inicio && v.inicio <= hoje ? 'Acontecendo agora' : null
+              return (
+                <TripCard
+                  key={v.id}
+                  href={`#/viagem/${v.id}`}
+                  imagem={capaDa(v, capas)}
+                  imagemAlt={`Foto de ${v.destino || v.titulo}`}
+                  rotulo={[tipo, d ? `${d} ${d === 1 ? 'dia' : 'dias'}` : null, quando].filter(Boolean).join(' · ')}
+                  titulo={v.titulo}
+                  local={v.destino}
+                  rodape={v.inicio ? (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                      <span><strong>{fmtData(v.inicio)}</strong>{v.fim ? ` até ${fmtData(v.fim)}` : ''}</span>
+                    </>
+                  ) : <span>Sem data definida</span>}
+                />
+              )
+            })}
+            {carregado && <NovaTripCard href="#/nova" />}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Casa do app: o mesmo círculo do fim da abertura, parado — viagens para abrir ou começar uma nova

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { FLOW_MARK_OURO } from '../lib/marca'
 
 export type ViagemCurta = { id: string; titulo: string; destino: string | null; inicio: string | null }
@@ -16,17 +15,16 @@ const quando = (iso: string | null) => (iso ? DATA.format(new Date(iso + 'T12:00
 
 /** Dentro do círculo: começar a primeira viagem, ou abrir uma das viagens / criar outra. */
 export function CirculoInicio({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null; logada: boolean; irPara: (hash: string) => void }) {
-  const [todas, setTodas] = useState(false)
   const lista = viagens ? ordenarViagens(viagens) : []
   const tem = lista.length > 0
-  const visiveis = todas ? lista : lista.slice(0, 3)
+  const visiveis = lista.slice(0, 3)
   return (
     <div className="fim-tunel">
       <span className="fim-marca" aria-hidden="true" dangerouslySetInnerHTML={{ __html: FLOW_MARK_OURO }} />
       {tem ? (
         <>
           <h2>{lista.length > 1 ? 'Suas viagens' : 'Sua próxima viagem'}</h2>
-          <div className={'fim-lista' + (todas ? ' fim-lista-todas' : '')}>
+          <div className="fim-lista">
             {visiveis.map((v) => (
               <button key={v.id} type="button" className="fim-viagem" onClick={() => irPara(`#/viagem/${v.id}`)}>
                 <span className="fim-viagem-nome">{v.titulo}</span>
@@ -34,11 +32,9 @@ export function CirculoInicio({ viagens, logada, irPara }: { viagens: ViagemCurt
               </button>
             ))}
           </div>
-          {lista.length > 3 && (
-            <button type="button" className="fim-nova fim-ver" onClick={() => setTodas((t) => !t)}>
-              {todas ? 'Mostrar menos' : `Ver todas (${lista.length})`}
-            </button>
-          )}
+          <button type="button" className="fim-nova fim-ver" onClick={() => irPara('#/minhas')}>
+            {lista.length > 3 ? `Ver todas as viagens (${lista.length})` : 'Ver minhas viagens'}
+          </button>
           <button type="button" className="fim-nova" onClick={() => irPara('#/nova')}>+ Começar uma nova</button>
         </>
       ) : (
