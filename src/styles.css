@@ -408,3 +408,5 @@ s{color:var(--muted)}
 .lia-prop-acoes{display:flex;gap:8px;align-items:center;margin-top:2px}
 .lia-prop-ok{color:#8FD3A1;font-size:13.5px;font-weight:600}
 .lia-prop-todas{align-self:stretch}
+.lia-prop-perigo{border-color:rgba(232,140,140,.35)}
+.btn.perigo{background:rgba(232,140,140,.14);border-color:rgba(232,140,140,.45);color:#F4B4B4}

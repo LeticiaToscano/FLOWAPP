@@ -23,7 +23,8 @@ type ReservaLida = {
   cancelamento_gratis_ate_local: string | null; duvida: string | null
 }
 type PropostaReservas = { reservas: ReservaLida[]; viagem: { destino: string | null; inicio: string | null; fim: string | null }; path: string | null; feitas: Record<number, 'ok' | 'ignorada' | 'erro'> }
-type Msg = { papel: 'eu' | 'assistente'; texto: string; antiga?: boolean; proposta?: PropostaReservas }
+type AcaoLia = { acao: string; dados: Row; estado?: 'feita' | 'cancelada' | 'erro' | 'confirmar' }
+type Msg = { papel: 'eu' | 'assistente'; texto: string; antiga?: boolean; proposta?: PropostaReservas; acoes?: AcaoLia[] }
 type ConversaLia = { id: string; titulo: string; atualizado_em: string }
 
 /** Nome da concierge de IA do Flow (aparece na aba, no chat e nas respostas). */
@@ -470,6 +471,113 @@ export default function Viagem({ id }: { id: string }) {
 
 
   /** voz: a Lia responde em voz alta — só no modo "Falar com a Lia" (conversa). Por escrito, responde em texto. */
+  /* ---------- Ações da Lia: ela propõe, a pessoa confirma, o app aplica com o login da pessoa ---------- */
+  const fmtLocal = (l?: string | null) => (l ? new Date(l + ':00').toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
+  const fmtDia = (d?: string | null) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '')
+  const ABA_NOME: Record<string, string> = { hoje: 'Hoje', roteiro: 'Roteiro', reservas: 'Reservas', documentos: 'Documentos', perfil: 'Perfil' }
+
+  function descreverAcao(a: AcaoLia): { titulo: string; detalhe?: string; perigo?: boolean } {
+    const d = a.dados
+    const nomeRes = (r?: Row) => (r ? `${tipoNome(r.tipo)}${r.fornecedor ? ' · ' + r.fornecedor : ''}` : 'reserva')
+    const trajeto = (x: Row) => [x.origem, x.destino].filter(Boolean).join(x.tipo === 'hotel' ? ' · ' : ' → ')
+    switch (a.acao) {
+      case 'criar_reserva': return { titulo: `Nova reserva: ${nomeRes(d)}`, detalhe: [trajeto(d), fmtLocal(d.inicio_local), d.codigo_reserva].filter(Boolean).join(' · ') }
+      case 'alterar_reserva': {
+        const r = reservas.find((x) => x.id === d.reserva_id)
+        const muda = Object.entries(d).filter(([k]) => !['reserva_id', 'fuso_inicio', 'fuso_fim'].includes(k)).map(([k, v]) => `${({ inicio_local: 'saída/check-in', fim_local: 'chegada/check-out', fornecedor: 'empresa', codigo_reserva: 'código', numero_bilhete: 'bilhete', status_pagamento: 'pagamento' } as Row)[k] || k}: ${/_local$/.test(k) ? fmtLocal(String(v)) : v}`)
+        return { titulo: `Alterar ${nomeRes(r)}`, detalhe: muda.join(' · ') }
+      }
+      case 'apagar_reserva': { const r = reservas.find((x) => x.id === d.reserva_id); return { titulo: `Apagar ${nomeRes(r)}`, detalhe: r ? trajeto(r) : '', perigo: true } }
+      case 'adicionar_item_roteiro': return { titulo: `Adicionar ao roteiro: ${d.titulo}`, detalhe: [fmtDia(d.dia), d.hora, d.regiao].filter(Boolean).join(' · ') }
+      case 'alterar_item_roteiro': {
+        const it = roteiro.find((x) => x.id === d.item_id)
+        const muda = [d.dia && `dia ${fmtDia(d.dia)}`, d.hora && `hora ${d.hora}`, d.titulo && `nome "${d.titulo}"`, d.regiao && `região ${d.regiao}`, d.travado === true && 'travar', d.travado === false && 'destravar'].filter(Boolean)
+        return { titulo: `Alterar no roteiro: ${it?.titulo || 'item'}`, detalhe: muda.join(' · ') }
+      }
+      case 'apagar_item_roteiro': { const it = roteiro.find((x) => x.id === d.item_id); return { titulo: `Tirar do roteiro: ${it?.titulo || 'item'}`, detalhe: it ? fmtDia(it.dia) : '', perigo: true } }
+      case 'montar_roteiro': return { titulo: 'Montar o roteiro com IA', detalhe: 'Ela monta os dias pelo seu perfil e pelas reservas; você revisa antes de aplicar.' }
+      case 'verificar_documentos': return { titulo: 'Verificar os documentos da viagem', detalhe: 'Consulta as fontes oficiais (passaporte, visto, seguro, vacinas).' }
+      case 'alterar_viagem': return { titulo: 'Mudar a viagem', detalhe: [d.titulo && `nome "${d.titulo}"`, d.destino && `destino ${d.destino}`, d.inicio && `ida ${fmtDia(d.inicio)}`, d.fim && `volta ${fmtDia(d.fim)}`, d.tipo].filter(Boolean).join(' · ') }
+      case 'atualizar_perfil': return { titulo: 'Atualizar seu perfil', detalhe: Object.entries(d).map(([k, v]) => `${k === 'nome' ? 'nome' : k}: ${Array.isArray(v) ? v.join(', ').replace(/_/g, ' ') : String(v).replace(/_/g, ' ')}`).join(' · ') }
+      case 'abrir_aba': return { titulo: `Abrir ${ABA_NOME[d.aba] || d.aba}` }
+      default: return { titulo: a.acao }
+    }
+  }
+
+  async function inserirReserva(body: Row) {
+    try { await rest('POST', 'reservas', { ...body, fonte: 'ia' }, 'return=minimal') }
+    catch (e) { if (/fonte|check constraint|violates/i.test(String(e))) await rest('POST', 'reservas', { ...body, fonte: 'manual' }, 'return=minimal'); else throw e }
+  }
+
+  async function executarAcao(a: AcaoLia) {
+    const d = a.dados
+    switch (a.acao) {
+      case 'criar_reserva': {
+        const fi = d.fuso_inicio || 'America/Sao_Paulo', ff = d.fuso_fim || fi
+        const body: Row = { viagem_id: id, tipo: d.tipo || 'outro', fornecedor: d.fornecedor, codigo_reserva: d.codigo_reserva, numero_bilhete: d.numero_bilhete, origem: d.origem, destino: d.destino, terminal: d.terminal, assentos: d.assentos, bagagem: d.bagagem, inicio: localParaUtc(d.inicio_local || null, fi), fuso_inicio: fi, fim: localParaUtc(d.fim_local || null, ff), fuso_fim: ff, status_pagamento: d.status_pagamento, confirmada: true, precisa_revisao: !d.inicio_local }
+        Object.keys(body).forEach((k) => { if (body[k] == null) delete body[k] })
+        await inserirReserva(body); break
+      }
+      case 'alterar_reserva': {
+        const r = reservas.find((x) => x.id === d.reserva_id)
+        if (!r) throw new Error('Não encontrei essa reserva.')
+        const fi = d.fuso_inicio || r.fuso_inicio, ff = d.fuso_fim || r.fuso_fim || fi
+        const body: Row = {}
+        for (const k of ['tipo', 'fornecedor', 'codigo_reserva', 'numero_bilhete', 'origem', 'destino', 'terminal', 'assentos', 'bagagem', 'status_pagamento']) if (d[k] != null) body[k] = d[k]
+        if (d.fuso_inicio) body.fuso_inicio = fi
+        if (d.fuso_fim) body.fuso_fim = ff
+        if (d.inicio_local) body.inicio = localParaUtc(d.inicio_local, fi)
+        if (d.fim_local) body.fim = localParaUtc(d.fim_local, ff)
+        await rest('PATCH', `reservas?id=eq.${r.id}`, body); break
+      }
+      case 'apagar_reserva': await rest('DELETE', `reservas?id=eq.${d.reserva_id}`); break
+      case 'adicionar_item_roteiro': await rest('POST', 'roteiro_itens', { viagem_id: id, origem: 'usuario', travado: false, dia: d.dia, hora: d.hora || null, titulo: d.titulo, regiao: d.regiao || null, por_que: d.por_que || null }, 'return=minimal'); break
+      case 'alterar_item_roteiro': {
+        const body: Row = {}
+        for (const k of ['dia', 'hora', 'titulo', 'regiao', 'por_que', 'travado']) if (d[k] != null) body[k] = d[k]
+        await rest('PATCH', `roteiro_itens?id=eq.${d.item_id}`, body); break
+      }
+      case 'apagar_item_roteiro': await rest('DELETE', `roteiro_itens?id=eq.${d.item_id}`); break
+      case 'montar_roteiro': irPara('roteiro'); void pedirRoteiroIA(); return
+      case 'verificar_documentos': irPara('documentos'); void verificarDocumentos(); return
+      case 'alterar_viagem': {
+        const body: Row = { ...d }
+        if (body.inicio && body.fim && body.fim < body.inicio) throw new Error('A volta ficou antes da ida.')
+        await rest('PATCH', `viagens?id=eq.${id}`, body); break
+      }
+      case 'atualizar_perfil': {
+        const { nome, ...pref } = d
+        if (nome) await rest('PATCH', `perfis?id=eq.${userId()}`, { nome })
+        if (Object.keys(pref).length) {
+          const atual = perfilViagem || {}
+          await rest('POST', 'perfil_viagem?on_conflict=usuario_id', { usuario_id: userId(), objetivos: atual.objetivos ?? [], ritmo: atual.ritmo ?? null, horario: atual.horario ?? null, deslocamento: atual.deslocamento ?? [], restricoes: atual.restricoes ?? [], imperdivel: atual.imperdivel ?? null, ...pref, atualizado_em: new Date().toISOString() }, 'resolution=merge-duplicates,return=minimal')
+        }
+        break
+      }
+      case 'abrir_aba': irPara(d.aba); return
+    }
+    await recarregar()
+  }
+
+  async function responderAcao(msgIdx: number, k: number, confirmar: boolean) {
+    const m = chatRef.current[msgIdx]
+    if (!m?.acoes) return
+    const acoes = [...m.acoes]
+    const a = acoes[k]
+    const atualizar = (estado: AcaoLia['estado']) => {
+      const lista = [...chatRef.current]
+      const nov = [...(lista[msgIdx].acoes || [])]; nov[k] = { ...nov[k], estado }
+      lista[msgIdx] = { ...lista[msgIdx], acoes: nov }
+      chatRef.current = lista; setChat(lista)
+    }
+    if (!confirmar) { atualizar('cancelada'); return }
+    // Apagar pede um segundo toque
+    if (descreverAcao(a).perigo && a.estado !== 'confirmar') { atualizar('confirmar'); return }
+    const sai = ['montar_roteiro', 'verificar_documentos', 'abrir_aba'].includes(a.acao)
+    try { atualizar('feita'); await executarAcao(a); if (!sai) ok('Feito.') }
+    catch (e) { atualizar('erro'); erro(/compromisso confirmado|cadeado/i.test(String(e)) ? 'Esse compromisso está travado. Destrave antes de mudar o dia ou a hora.' : erroPt(e)) }
+  }
+
   /** A pessoa mandou um comprovante (ou colou o texto): a Lia lê e propõe as reservas, para a pessoa confirmar. */
   async function lerReserva(arquivo: File | null, textoColado?: string) {
     if (carregandoRef.current) return
@@ -561,8 +669,8 @@ export default function Viagem({ id }: { id: string }) {
     destravarVoz()
     const avisoDemora = window.setTimeout(() => { if (!voz) void falar('pensando', true) }, 1800)
     try {
-      const d = await chamarIA<{ resposta: string; audio?: string }>('assistente-ia', { viagem_id: id, voz, conversa: conversaRef.current, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
-      chatRef.current = [...nova, { papel: 'assistente', texto: d.resposta }]
+      const d = await chamarIA<{ resposta: string; audio?: string; acoes?: AcaoLia[] }>('assistente-ia', { viagem_id: id, voz, conversa: conversaRef.current, mensagens: nova.map((m) => ({ papel: m.papel === 'eu' ? 'usuario' : 'assistente', texto: m.texto })) })
+      chatRef.current = [...nova, { papel: 'assistente', texto: d.resposta, acoes: d.acoes?.length ? d.acoes : undefined }]
       setChat(chatRef.current)
       carregandoRef.current = false
       void guardarNoHistorico(t, d.resposta)
@@ -886,6 +994,29 @@ export default function Viagem({ id }: { id: string }) {
                   {m.antiga ? m.texto : m.texto.split(/(\s+)/).map((p, i) => (/^\s+$/.test(p) ? p : <span key={i} className="lia-palavra" style={{ animationDelay: `${Math.min(i * 22, 1600)}ms` }}>{p}</span>))}
                 </div>
                 {m.proposta && <PropostaCartoes m={m} idx={n} />}
+                {m.acoes && (
+                  <div className="lia-propostas">
+                    {m.acoes.map((a, k) => {
+                      const dsc = descreverAcao(a)
+                      return (
+                        <div key={k} className={'lia-prop' + (a.estado === 'feita' ? ' feita-ok' : a.estado === 'cancelada' ? ' feita-ignorada' : '') + (dsc.perigo ? ' lia-prop-perigo' : '')}>
+                          <div className="lia-prop-topo"><strong>{dsc.titulo}</strong></div>
+                          {dsc.detalhe && <div className="lia-prop-linha soft">{dsc.detalhe}</div>}
+                          <div className="lia-prop-acoes">
+                            {a.estado === 'feita' ? <span className="lia-prop-ok">Feito ✓</span>
+                              : a.estado === 'cancelada' ? <span className="soft">Cancelado</span>
+                                : <>
+                                  <button type="button" className={'btn sm ' + (dsc.perigo ? 'perigo' : 'primary')} onClick={() => void responderAcao(n, k, true)}>
+                                    {a.estado === 'confirmar' ? 'Toque de novo para apagar' : a.acao === 'abrir_aba' ? 'Abrir' : a.estado === 'erro' ? 'Tentar de novo' : 'Confirmar'}
+                                  </button>
+                                  <button type="button" className="btn sm ghost" onClick={() => void responderAcao(n, k, false)}>Cancelar</button>
+                                </>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
                 </Fragment>
               ),
           )}
