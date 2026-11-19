@@ -5,8 +5,7 @@ import PerspectiveTunnelHero from './ui/perspective-tunnel-hero'
 import { VoicePoweredOrb } from './ui/voice-powered-orb'
 import { DESTINOS_TUNEL } from '../lib/destinos-tunel'
 import { getSessao, rest } from '../lib/supabase'
-
-type ViagemCurta = { id: string; titulo: string; destino: string | null; inicio: string | null }
+import { CirculoInicio, type ViagemCurta } from './inicio-circulo'
 
 const KEY = 'flow.abertura'
 
@@ -70,12 +69,7 @@ export default function Abertura() {
     // se já entrou, busca as viagens para mostrar no fim do túnel (só as dela: o banco filtra pelo login)
     if (getSessao()) {
       rest<ViagemCurta[]>('GET', 'viagens?select=id,titulo,destino,inicio&order=inicio.asc.nullslast&limit=30')
-        .then((vs) => {
-          const hoje = new Date().toISOString().slice(0, 10)
-          const proximas = vs.filter((v) => !v.inicio || v.inicio >= hoje)
-          const passadas = vs.filter((v) => v.inicio && v.inicio < hoje).reverse()
-          setViagens([...proximas, ...passadas].slice(0, 3))
-        })
+        .then((vs) => setViagens(vs))
         .catch(() => setViagens([]))
     } else setViagens([])
     // já baixa as fotos do túnel enquanto o logo aparece
@@ -174,7 +168,7 @@ export default function Abertura() {
             duracao={4800}
             aoTerminar={() => setNoFim(true)}
             luz={<VoicePoweredOrb enableVoiceControl={false} />}
-            final={<FimDoTunel viagens={viagens} logada={!!getSessao()} irPara={irPara} />}
+            final={<CirculoInicio viagens={viagens} logada={!!getSessao()} irPara={irPara} />}
           />
         </div>
       )}
@@ -183,40 +177,6 @@ export default function Abertura() {
         <span ref={nome} className="abertura-nome">FLOW</span>
       </div>
       {!noFim && <button type="button" className="abertura-pular" onClick={sumir} aria-hidden="false">Pular</button>}
-    </div>
-  )
-}
-
-const DATA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' })
-const quando = (iso: string | null) => (iso ? DATA.format(new Date(iso + 'T12:00:00')).replace('.', '') : 'Sem data')
-
-/** Dentro do círculo, no fim do túnel: começar a primeira viagem, ou abrir uma das próximas / criar outra. */
-function FimDoTunel({ viagens, logada, irPara }: { viagens: ViagemCurta[] | null; logada: boolean; irPara: (hash: string) => void }) {
-  const tem = !!viagens && viagens.length > 0
-  return (
-    <div className="fim-tunel">
-      <span className="fim-marca" aria-hidden="true" dangerouslySetInnerHTML={{ __html: FLOW_MARK_OURO }} />
-      {tem ? (
-        <>
-          <h2>Sua próxima viagem</h2>
-          <div className="fim-lista">
-            {viagens!.map((v) => (
-              <button key={v.id} type="button" className="fim-viagem" onClick={() => irPara(`#/viagem/${v.id}`)}>
-                <span className="fim-viagem-nome">{v.titulo}</span>
-                <span className="fim-viagem-data">{quando(v.inicio)}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="fim-nova" onClick={() => irPara('#/nova')}>+ Começar uma nova</button>
-        </>
-      ) : (
-        <>
-          <h2>Comece sua<br />viagem</h2>
-          <button type="button" className="fim-comecar" onClick={() => irPara(logada ? '#/nova' : '')}>
-            {logada ? 'Começar' : 'Entrar e começar'}
-          </button>
-        </>
-      )}
     </div>
   )
 }

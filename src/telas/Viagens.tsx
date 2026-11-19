@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { CardFanCarousel, type CardItem } from '../components/ui/card-fan-carousel'
+import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
+import { CirculoInicio } from '../components/inicio-circulo'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
 import { authReq, baixarArquivo, getSessao, rest, setSessao, userId } from '../lib/supabase'
-import { buscarCapaWikipedia, capaPadrao, CARTAO_NOVA } from '../lib/capa'
+import { buscarCapaWikipedia, capaPadrao } from '../lib/capa'
 import { campo, erroPt } from '../lib/textos'
-import { fmtData } from '../lib/tempo'
 
 export type ViagemRow = {
   id: string
@@ -43,8 +43,7 @@ export default function Viagens({ nova, avisoInicial }: { nova: boolean; avisoIn
   const [viagens, setViagens] = useState<ViagemRow[]>([])
   const [carregado, setCarregado] = useState(false)
   const [aviso, setAviso] = useState<Aviso>(avisoInicial)
-  const capas = useCapas(viagens)
-  // Com a abertura na tela, o leque espera o avião passar para abrir os cartões.
+  // Com a abertura na tela, a luz do círculo de baixo só liga quando ela termina (uma luz por vez).
   const [liberado, setLiberado] = useState(() => !(window as any).__flowAbertura)
   useEffect(() => {
     if (liberado) return
@@ -83,62 +82,47 @@ export default function Viagens({ nova, avisoInicial }: { nova: boolean; avisoIn
     window.location.hash = ''
   }
 
-  const cards: CardItem[] = [
-    ...viagens.map((v) => ({ imgUrl: capaDa(v, capas), alt: v.titulo + (v.destino ? ' — ' + v.destino : ''), linkUrl: `#/viagem/${v.id}` })),
-    { imgUrl: CARTAO_NOVA, alt: 'Criar uma nova viagem', linkUrl: '#/nova' },
-  ]
+  // Casa do app: o mesmo círculo do fim da abertura, parado — viagens para abrir ou começar uma nova
+  if (!nova) {
+    return (
+      <div className="inicio tunel tunel-fim">
+        <div className="tunel-grade" aria-hidden="true" />
+        <div className="tunel-brilho" aria-hidden="true" />
+        <div className="tunel-anel inicio-anel" aria-hidden="true" />
+        <div className="tunel-anel tunel-anel-2 inicio-anel-2" aria-hidden="true" />
+        {liberado && <div className="tunel-luz" aria-hidden="true"><VoicePoweredOrb enableVoiceControl={false} /></div>}
+        <button type="button" className="inicio-sair" onClick={sair}>Sair</button>
+        {aviso && <div className="inicio-aviso"><AvisoBox aviso={aviso} /></div>}
+        <div className="tunel-final">
+          {carregado && <CirculoInicio viagens={viagens} logada irPara={(h) => { window.location.hash = h }} />}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="viagens">
       <header className="viagens-topo">
-        <h1>Minhas viagens</h1>
-        <button type="button" className="btn sm" onClick={sair}>Sair</button>
+        <h1>Nova viagem</h1>
+        <a className="btn sm" href="#/viagens" style={{ textDecoration: 'none' }}>Voltar</a>
       </header>
-
-      {carregado && liberado && !nova && (
-        <div className="viagens-leque">
-          <CardFanCarousel cards={cards} theme="dark" />
-        </div>
-      )}
 
       <div className="viagens-base">
         <AvisoBox aviso={aviso} />
-        {!carregado && <p className="muted">Carregando suas viagens…</p>}
-
-        {nova ? (
-          <form className="card stack" noValidate onSubmit={(e) => enviar(e, criar, (t) => setAviso({ texto: t, erro: true }), erroPt)}>
-            <strong>Nova viagem</strong>
-            <label>Nome da viagem<input name="titulo" required maxLength={80} placeholder="Ex.: Paris e Alpes" /></label>
-            <label>Destino<input name="destino" maxLength={120} placeholder="Ex.: Paris" /></label>
-            <p className="hint">Buscamos uma foto do destino automaticamente. Você pode trocar pela sua depois.</p>
-            <div className="grid2">
-              <label>Ida<input name="inicio" type="date" /></label>
-              <label>Volta<input name="fim" type="date" /></label>
-            </div>
-            <label>Tipo<select name="tipo" defaultValue="internacional"><option value="internacional">Internacional</option><option value="nacional">Nacional</option></select></label>
-            <div className="row">
-              <button className="btn primary" type="submit" style={{ flex: 2 }}>Criar viagem</button>
-              <a className="btn" href="#/viagens" style={{ flex: 1, textDecoration: 'none' }}>Cancelar</a>
-            </div>
-          </form>
-        ) : (
-          carregado && (
-            <>
-              {viagens.length > 0 ? (
-                <nav className="lista-viagens" aria-label="Suas viagens">
-                  {viagens.map((v) => (
-                    <a key={v.id} href={`#/viagem/${v.id}`}>
-                      {v.titulo}{v.inicio ? ` · ${fmtData(v.inicio)}` : ''}
-                    </a>
-                  ))}
-                </nav>
-              ) : (
-                <p className="muted">Você ainda não tem viagens. Toque em "Nova viagem" para começar.</p>
-              )}
-              <a className="btn primary" href="#/nova" style={{ textDecoration: 'none' }}>Nova viagem</a>
-            </>
-          )
-        )}
+        <form className="card stack" noValidate onSubmit={(e) => enviar(e, criar, (t) => setAviso({ texto: t, erro: true }), erroPt)}>
+          <label>Nome da viagem<input name="titulo" required maxLength={80} placeholder="Ex.: Paris e Alpes" /></label>
+          <label>Destino<input name="destino" maxLength={120} placeholder="Ex.: Paris" /></label>
+          <p className="hint">Buscamos uma foto do destino automaticamente. Você pode trocar pela sua depois.</p>
+          <div className="grid2">
+            <label>Ida<input name="inicio" type="date" /></label>
+            <label>Volta<input name="fim" type="date" /></label>
+          </div>
+          <label>Tipo<select name="tipo" defaultValue="internacional"><option value="internacional">Internacional</option><option value="nacional">Nacional</option></select></label>
+          <div className="row">
+            <button className="btn primary" type="submit" style={{ flex: 2 }}>Criar viagem</button>
+            <a className="btn" href="#/viagens" style={{ flex: 1, textDecoration: 'none' }}>Cancelar</a>
+          </div>
+        </form>
       </div>
     </div>
   )

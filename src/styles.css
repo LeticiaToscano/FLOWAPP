@@ -344,3 +344,17 @@ s{color:var(--muted)}
 .tunel-luz{position:absolute;left:50%;top:50%;width:calc(min(86vw,74vh,440px) * 1.36);height:calc(min(86vw,74vh,440px) * 1.36);transform:translate(-50%,-50%);pointer-events:none;will-change:transform,opacity}
 .tunel-anel{will-change:transform}
 @media (max-width:480px){.fim-viagem{min-height:40px;padding:0 12px}.fim-viagem-nome{font-size:14px}.fim-tunel{gap:10px}.tunel-luz{width:calc(min(92vw,74vh,440px) * 1.36);height:calc(min(92vw,74vh,440px) * 1.36)}}
+
+/* Casa do app (no lugar de "Minhas viagens"): o círculo parado, igual ao fim da abertura */
+.inicio{position:fixed;inset:0;height:auto;min-height:100svh}
+.inicio .inicio-anel{width:min(86vw,74vh,440px);height:min(86vw,74vh,440px);border-color:rgba(226,209,168,.12)}
+.inicio .inicio-anel-2{width:min(100vw,92vh,560px);height:min(100vw,92vh,560px)}
+.inicio .tunel-luz{animation:tunel-entra 1s ease both}
+.inicio .fim-tunel{animation-delay:0s}
+.inicio-sair{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:40;min-height:38px;padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.4);color:#BDBDBD;font:inherit;font-size:13px;cursor:pointer}
+.inicio-sair:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+.inicio-aviso{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:40;max-width:520px;margin:0 auto}
+.fim-lista-todas{max-height:min(34vh,240px);overflow-y:auto;padding-right:2px}
+.fim-ver{font-size:13px;color:#A3A3A3;padding:2px 10px}
+@media (max-width:480px){.inicio .inicio-anel{width:min(92vw,74vh,440px);height:min(92vw,74vh,440px)}}
+.viagens-topo + .viagens-base{margin-top:16px}
