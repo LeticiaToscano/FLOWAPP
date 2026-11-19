@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type React from 'react'
 import { FLOW_MARK_OURO } from '../lib/marca'
 
 const KEY = 'flow.abertura'
@@ -9,9 +10,9 @@ const KEY = 'flow.abertura'
    3. o "f" desliza para o lado e o nome FLOW aparece ao lado dele;
    4. a abertura some e os cartões das viagens entram. Uma vez por sessão. */
 
-// Caminho do voo (num quadro de 400 × 400): entra por baixo à esquerda, sobe, faz uma volta e chega ao centro indo para a direita
-const VOO = 'M -20 310 C 70 300 110 120 228 128 C 335 136 322 262 242 252 C 182 244 166 200 200 200'
-const T_VOO = 1500
+// Caminho do voo (num quadro de 400 × 400): entra pela esquerda rente, como numa pista, decola suave e chega ao centro
+const VOO = 'M -60 238 C 40 238 110 238 150 226 C 176 218 186 200 200 200'
+const T_VOO = 1350
 
 /** Avisa a tela de viagens que pode abrir o leque. */
 const liberarCartoes = () => {
@@ -88,17 +89,18 @@ export default function Abertura() {
     // 2. Pousa: o fio some, o avião vira o "f" dourado
     depois(T_VOO - 120, () => {
       anim(r, [{ opacity: 1 }, { opacity: 0 }], { duration: 600, easing: 'ease-out' })
-      anim(aviao.current, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.6)' }], { duration: 380, easing: 'ease-in' })
-      anim(marca.current, [{ opacity: 0, transform: 'scale(.6)', filter: 'blur(6px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0)' }], { duration: 520, easing: 'cubic-bezier(.22,1,.36,1)' })
+      anim(aviao.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'ease-in' })
+      anim(marca.current, [{ opacity: 0, transform: 'scale(.92)', filter: 'blur(4px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0)' }], { duration: 700, easing: 'cubic-bezier(.22,1,.36,1)' })
     })
 
     // 3. O "f" desliza para o lado e o nome FLOW aparece
-    depois(T_VOO + 650, () => {
-      anim(nome.current, [{ maxWidth: '0px', opacity: 0, clipPath: 'inset(0 100% 0 0)' }, { maxWidth: '200px', opacity: 1, clipPath: 'inset(0 0 0 0)' }], { duration: 850, easing: 'cubic-bezier(.65,0,.35,1)' })
+    depois(T_VOO + 600, () => {
+      anim(nome.current, [{ maxWidth: '0px', clipPath: 'inset(0 100% 0 0)' }, { maxWidth: '200px', clipPath: 'inset(0 0 0 0)' }], { duration: 1000, easing: 'cubic-bezier(.65,0,.35,1)' })
+      anim(nome.current, [{ opacity: 0, letterSpacing: '.9em' }, { opacity: 1, letterSpacing: '.5em' }], { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' })
     })
 
     // 4. Some e libera os cartões
-    depois(T_VOO + 2300, sumir)
+    depois(T_VOO + 2500, sumir)
     return () => { timers.forEach(clearTimeout); cancelAnimationFrame(raf) }
   }, [mostrar])
 
@@ -113,10 +115,14 @@ export default function Abertura() {
             <stop offset=".75" stopColor="#B89A5E" />
             <stop offset="1" stopColor="#F1E3BC" />
           </linearGradient>
+          <linearGradient id="abertura-fio" gradientUnits="userSpaceOnUse" x1="-60" y1="0" x2="200" y2="0">
+            <stop offset="0" stopColor="#E2D1A8" stopOpacity="0" />
+            <stop offset="1" stopColor="#E2D1A8" stopOpacity=".7" />
+          </linearGradient>
         </defs>
-        <path ref={rastro} d={VOO} fill="none" stroke="#E2D1A8" strokeOpacity=".55" strokeWidth="1.1" strokeLinecap="round" />
+        <path ref={rastro} d={VOO} fill="none" stroke="url(#abertura-fio)" strokeWidth=".7" strokeLinecap="round" />
         <g ref={voando} transform="translate(-20 310)">
-          <g ref={aviao} style={{ opacity: 0, transformBox: 'fill-box', transformOrigin: 'center' }}>
+          <g ref={aviao} style={{ opacity: 0, transformBox: 'fill-box', transformOrigin: 'center', scale: '.72' } as React.CSSProperties}>
           {/* aviãozinho de cima, com o nariz para a direita (o sentido do voo) */}
           <path
             fill="url(#abertura-ouro)"
