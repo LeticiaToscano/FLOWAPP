@@ -2,7 +2,8 @@
 //
 // A pessoa conversa com a Lia logo na tela inicial. A Lia pode:
 // - conversar e PROPOR ações: criar uma viagem, abrir uma viagem existente, atualizar o perfil de viagem;
-// - ler um comprovante de reserva (PDF/foto mandado aqui mesmo, sem gravar, ou texto colado) e propor as reservas
+// - ler um comprovante de reserva (PDF/foto que o app põe na pasta temporária "entrada/<id da pessoa>/", lida
+//   e apagada em seguida; ou texto colado) e propor as reservas
 //   e a viagem que sai delas.
 // Nada é gravado aqui: o app mostra cartões e só aplica com o "Confirmar"/"Adicionar" da pessoa, com o login dela.
 //
@@ -11,12 +12,13 @@
 // a IA nunca devolve passaporte, CPF, documento ou cartão, e a função descarta campos fora da lista.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 
 const ORIGENS = ['https://flowapp-virid.vercel.app', 'http://localhost:5173']
 const MODELO = 'claude-sonnet-5-5'
 const LIMITE_CONVERSA = 60
 const LIMITE_LEITURA = 20
-const MAX_BYTES = 7 * 1024 * 1024
+const MAX_BYTES = 20 * 1024 * 1024
 
 function cors(origem: string | null) {
   return {
@@ -134,27 +136,33 @@ Deno.serve(async (req) => {
   if (!quem?.user) return responder({ erro: 'Sessão expirada. Entre de novo.' }, 401)
   const eu = quem.user.id
 
-  let corpo: { mensagens?: unknown; arquivo?: { b64?: unknown; tipo?: unknown; nome?: unknown }; texto?: unknown } = {}
+  let corpo: { mensagens?: unknown; path?: unknown; texto?: unknown } = {}
   try { corpo = await req.json() } catch { /* corpo inválido */ }
   const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
 
   /* ---------- Modo leitura: comprovante (arquivo ou texto colado) ---------- */
-  const b64 = typeof corpo.arquivo?.b64 === 'string' ? corpo.arquivo.b64 : ''
+  const path = typeof corpo.path === 'string' ? corpo.path : ''
   const textoColado = corta(corpo.texto, 20000)
-  if (b64 || textoColado) {
+  if (path && (!path.startsWith(eu + '/') || path.includes('..'))) return responder({ erro: 'Arquivo inválido.' }, 400)
+  if (path || textoColado) {
     const { count } = await db.from('uso_ia').select('id', { count: 'exact', head: true }).eq('tipo', 'reserva').gte('criado_em', desde)
     if ((count ?? 0) >= LIMITE_LEITURA) return responder({ erro: `A Lia já leu ${LIMITE_LEITURA} reservas nas últimas 24 horas. Tente de novo amanhã.` }, 429)
     const conteudo: unknown[] = []
-    if (b64) {
-      if (b64.length > MAX_BYTES * 1.37) return responder({ erro: 'Arquivo grande demais (até 7 MB aqui).' }, 400)
-      const tipo = String(corpo.arquivo?.tipo || '')
-      const nome = String(corpo.arquivo?.nome || '').toLowerCase()
-      if (tipo === 'application/pdf' || nome.endsWith('.pdf')) conteudo.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } })
-      else if (/^image\/(jpeg|png|webp|gif)$/.test(tipo)) conteudo.push({ type: 'image', source: { type: 'base64', media_type: tipo, data: b64 } })
-      else if (tipo.startsWith('text/') || /\.(eml|txt|html?)$/.test(nome)) {
-        try { conteudo.push({ type: 'text', text: 'Conteúdo do arquivo:\n' + new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))).slice(0, 60000) }) }
-        catch { return responder({ erro: 'Não consegui abrir o arquivo.' }, 400) }
-      } else return responder({ erro: 'Mande o comprovante em PDF ou foto (JPG ou PNG). Foto do iPhone em HEIC: exporte como JPG.' }, 400)
+    if (path) {
+      const { data: arq, error } = await db.storage.from('entrada').download(path)
+      // a pasta é temporária: apaga assim que leu (o app guarda o comprovante na viagem quando a pessoa confirmar)
+      await db.storage.from('entrada').remove([path])
+      if (error || !arq) return responder({ erro: 'Não consegui abrir o arquivo.' }, 404)
+      if (arq.size > MAX_BYTES) return responder({ erro: 'Arquivo maior que 20 MB. Mande só as páginas das reservas ou prints delas.' }, 400)
+      const bytes = new Uint8Array(await arq.arrayBuffer())
+      const tipo = arq.type || ''
+      const nome = path.toLowerCase()
+      if (tipo === 'application/pdf' || nome.endsWith('.pdf')) conteudo.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: encodeBase64(bytes) } })
+      else if (/^image\/(jpeg|png|webp|gif)$/.test(tipo) || /\.(jpe?g|png|webp|gif)$/.test(nome)) {
+        const mt = /^image\//.test(tipo) ? tipo : nome.endsWith('.png') ? 'image/png' : nome.endsWith('.webp') ? 'image/webp' : nome.endsWith('.gif') ? 'image/gif' : 'image/jpeg'
+        conteudo.push({ type: 'image', source: { type: 'base64', media_type: mt, data: encodeBase64(bytes) } })
+      } else if (tipo.startsWith('text/') || /\.(eml|txt|html?)$/.test(nome)) conteudo.push({ type: 'text', text: 'Conteúdo do arquivo:\n' + new TextDecoder().decode(bytes).slice(0, 60000) })
+      else return responder({ erro: 'Mande o comprovante em PDF ou foto (JPG ou PNG). Foto do iPhone em HEIC: exporte como JPG.' }, 400)
     }
     if (textoColado) conteudo.push({ type: 'text', text: 'Texto que a pessoa colou:\n' + textoColado })
     conteudo.push({ type: 'text', text: 'A pessoa ainda não criou a viagem no app. Extraia todas as reservas e sugira a viagem (destino e datas).' })

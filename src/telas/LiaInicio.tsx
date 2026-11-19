@@ -32,12 +32,6 @@ async function chamar<T>(corpo: unknown): Promise<T> {
   return d as T
 }
 
-const paraBase64 = (f: File) => new Promise<string>((ok, falha) => {
-  const fr = new FileReader()
-  fr.onload = () => ok(String(fr.result).split(',')[1] || '')
-  fr.onerror = () => falha(new Error('Não consegui abrir o arquivo.'))
-  fr.readAsDataURL(f)
-})
 
 const quando = (l: string | null) => (l ? new Date(l + ':00').toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'sem data')
 const dia = (d?: string | null) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '')
@@ -83,8 +77,8 @@ export default function LiaInicio() {
     const nova: Msg[] = [...chatRef.current, { papel: 'eu', texto: rotulo }]
     por(nova); setTexto(''); setCarregando(true); setAviso(null)
     try {
-      if (arquivo && arquivo.size > 7 * 1024 * 1024) throw new Error('Arquivo maior que 7 MB. Mande um PDF menor ou um print.')
-      const corpo = arquivo ? { arquivo: { b64: await paraBase64(arquivo), tipo: arquivo.type, nome: arquivo.name } } : { texto: colado }
+      // O arquivo vai para a pasta pessoal e temporária da pessoa ("entrada"); a função lê e apaga em seguida
+      const corpo = arquivo ? { path: await enviarArquivo(userId(), arquivo, 'ler-', 'entrada') } : { texto: colado }
       const d = await chamar<{ resumo: string; reservas: ReservaLida[]; viagem: Proposta['viagem'] }>(corpo)
       const n = d.reservas.length
       const txt = n

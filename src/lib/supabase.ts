@@ -82,12 +82,12 @@ export async function rest<T = any>(method: string, path: string, body?: unknown
 const caminho = (p: string) => p.split('/').map(encodeURIComponent).join('/')
 
 /** Envia um arquivo para o cofre privado, em <id da viagem>/<arquivo>. */
-export async function enviarArquivo(viagemId: string, file: File, prefixo = '') {
+export async function enviarArquivo(viagemId: string, file: File, prefixo = '', bucket = 'comprovantes') {
   if (file.size > MAX_FILE) throw new Error('Arquivo maior que 20 MB. Mande só as páginas das reservas ou prints delas.')
   const nome = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_').slice(-80)
   const path = `${viagemId}/${prefixo}${crypto.randomUUID()}-${nome}`
   const token = await getToken()
-  const r = await fetch(`${SUPA_URL}/storage/v1/object/comprovantes/${caminho(path)}`, {
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/${bucket}/${caminho(path)}`, {
     method: 'POST',
     headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + token, 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'false' },
     body: file,
