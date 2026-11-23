@@ -10,8 +10,13 @@ export type Alfinete = { lat: number; lng: number; rotulo?: string; icone?: stri
 export type Ponto = { lat: number; lng: number }
 
 const TAM = 256
-// OpenStreetMap padrão (gratuito, sem chave), nas cores originais.
-const bloco = (z: number, x: number, y: number) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+// Stadia Maps "OSM Bright" em alta resolução (@2x), liberado pelo domínio do site, sem chave no código.
+// Se a Stadia recusar (domínio ainda não cadastrado), cai para o OpenStreetMap padrão.
+type Fonte = 'stadia' | 'osm'
+const bloco = (f: Fonte, z: number, x: number, y: number) => f === 'stadia'
+  ? `https://tiles.stadiamaps.com/tiles/osm_bright/${z}/${x}/${y}@2x.png`
+  : `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+let fonteDaSessao: Fonte = 'stadia'
 
 // Projeção de Mercator (a mesma dos mapas da web), em pixels do mundo no zoom z
 const paraPx = (p: Ponto, z: number) => {
@@ -36,6 +41,8 @@ export default function Mapa({ centro, zoom = 12, alfinetes = [], deslocarY = 0,
   const caixa = useRef<HTMLDivElement>(null)
   const [tam, setTam] = useState({ w: 390, h: 600 })
   const [vista, setVista] = useState({ c: centro, z: zoom })
+  const [fonte, setFonte] = useState<Fonte>(fonteDaSessao)
+  const falhou = () => { if (fonte === 'stadia') { fonteDaSessao = 'osm'; setFonte('osm') } }
   useEffect(() => { setVista({ c: centro, z: zoom }) }, [centro.lat, centro.lng, zoom])
   useEffect(() => {
     const el = caixa.current!
@@ -59,10 +66,10 @@ export default function Mapa({ centro, zoom = 12, alfinetes = [], deslocarY = 0,
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
       if (y < 0 || y >= n) continue
       const xx = ((x % n) + n) % n
-      lista.push({ k: `${zi}/${x}/${y}`, src: bloco(zi, xx, y), l: (x * TAM - ox) * escala, t: (y * TAM - oy) * escala })
+      lista.push({ k: `${zi}/${x}/${y}`, src: bloco(fonte, zi, xx, y), l: (x * TAM - ox) * escala, t: (y * TAM - oy) * escala })
     }
     return lista
-  }, [zi, ox, oy, tam.w, tam.h, escala])
+  }, [zi, ox, oy, tam.w, tam.h, escala, fonte])
 
   // Arrastar e pinçar
   const toques = useRef(new Map<number, { x: number; y: number }>())
@@ -107,7 +114,7 @@ export default function Mapa({ centro, zoom = 12, alfinetes = [], deslocarY = 0,
         {blocos.map((b) => (
           <img key={b.k} src={b.src} alt="" draggable={false} decoding="async"
             style={{ left: b.l, top: b.t, width: TAM * escala + 0.5, height: TAM * escala + 0.5 }}
-            onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
+            onError={(e) => { if (fonte === 'stadia') falhou(); else (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
         ))}
       </div>
       {alfinetes.map((a, i) => {
@@ -126,7 +133,7 @@ export default function Mapa({ centro, zoom = 12, alfinetes = [], deslocarY = 0,
         <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => zoomEm(1)} aria-label="Aproximar">+</button>
         <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => zoomEm(-1)} aria-label="Afastar">−</button>
       </div>
-      <a className="mapa-credito" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>© OpenStreetMap</a>
+      <a className="mapa-credito" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>{fonte === 'stadia' ? '© Stadia Maps © OpenMapTiles © OpenStreetMap' : '© OpenStreetMap'}</a>
     </div>
   )
 }
