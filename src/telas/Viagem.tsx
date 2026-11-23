@@ -73,7 +73,11 @@ export default function Viagem({ id }: { id: string }) {
   const [roteiro, setRoteiro] = useState<Row[]>([])
   const [perfilViagem, setPerfilViagem] = useState<Row | null>(null)
   const [perfil, setPerfil] = useState<Row | null>(null)
-  const [aba, setAba] = useState<Aba>('hoje')
+  const [aba, setAba] = useState<Aba>(() => {
+    // vindo do "Criar viagem" com "Já tenho reservas": abre direto na Lia para mandar os comprovantes
+    try { if (sessionStorage.getItem('flow.abrirLia.' + id)) { sessionStorage.removeItem('flow.abrirLia.' + id); return 'assistente' } } catch { /* segue */ }
+    return 'hoje'
+  })
   const [resForm, setResForm] = useState<string | null>(null) // 'novo' | id
   const [itemForm, setItemForm] = useState<string | null>(null) // 'novo' | id
   const [historico, setHistorico] = useState<Row[]>([])

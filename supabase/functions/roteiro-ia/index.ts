@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
   const doUsuario = (itens || []).filter((i: Record<string, unknown>) => !i.travado && i.origem === 'usuario')
 
   const contexto = {
-    viagem: { titulo: viagem.titulo, destino: viagem.destino, inicio: viagem.inicio, fim: viagem.fim, fuso: viagem.fuso ?? null },
+    viagem: { titulo: viagem.titulo, destino: viagem.destino, inicio: viagem.inicio, fim: viagem.fim, fuso: viagem.fuso ?? null, companhia: viagem.companhia ?? null, pessoas: viagem.pessoas ?? null, interesses: viagem.interesses ?? null },
     perfil: perfil || 'não preenchido — use um ritmo equilibrado',
     reservas: agenda,
     compromissos_travados: travados,
