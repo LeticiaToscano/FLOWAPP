@@ -11,8 +11,8 @@ import type { ViagemRow } from './Viagens'
  */
 
 type Destino = { nome: string; pais?: string | null; cc?: string | null }
-type Passo = 'onde' | 'quando' | 'quem' | 'interesses' | 'reservas'
-const PASSOS: Passo[] = ['onde', 'quando', 'quem', 'interesses', 'reservas']
+type Passo = 'onde' | 'quando' | 'quem' | 'estilo' | 'interesses' | 'reservas'
+const PASSOS: Passo[] = ['onde', 'quando', 'quem', 'estilo', 'interesses', 'reservas']
 
 const bandeira = (cc?: string | null) => (cc && /^[A-Z]{2}$/i.test(cc) ? String.fromCodePoint(...cc.toUpperCase().split('').map((c) => 127397 + c.charCodeAt(0))) : '📍')
 
@@ -32,12 +32,17 @@ POPULARES.todas = [POPULARES.europa[0], POPULARES.europa[1], POPULARES['america-
 
 const COMPANHIA: [string, string, string][] = [['sozinha', 'Sozinha', '🧳'], ['casal', 'Casal', '💑'], ['amigos', 'Amigos', '👯'], ['familia', 'Família', '👨‍👩‍👧']]
 const INTERESSES: [string, string, string][] = [['cultura', 'Cultura e história', '🏛️'], ['gastronomia', 'Gastronomia', '🍝'], ['arte', 'Arte e museus', '🎨'], ['natureza', 'Natureza', '🌿'], ['praia', 'Praia', '🏖️'], ['compras', 'Compras', '🛍️'], ['vida_noturna', 'Vida noturna', '🍸'], ['aventura', 'Aventura', '🧗'], ['bem_estar', 'Bem-estar', '🧖']]
+const RITMO: [string, string, string][] = [['tranquilo', 'Tranquilo', 'Poucas coisas por dia, com pausas'], ['equilibrado', 'Equilibrado', 'Passeios e tempo livre'], ['intenso', 'Intenso', 'Ver o máximo possível']]
+const ORCAMENTO: [string, string, string][] = [['economico', 'Econômico', '$'], ['conforto', 'Conforto', '$$'], ['luxo', 'Luxo', '$$$']]
+const HORARIO: [string, string, string][] = [['cedo', 'Começar cedo', '🌅'], ['tarde', 'Acordar sem pressa', '😴']]
+const DESLOC: [string, string, string][] = [['a_pe', 'A pé', '🚶'], ['transporte_publico', 'Metrô e ônibus', '🚇'], ['taxi_app', 'Táxi ou app', '🚕'], ['carro', 'Carro alugado', '🚗']]
 const DE_OBJETIVO: Record<string, string> = { cultura: 'cultura', gastronomia: 'gastronomia', compras: 'compras', aventura: 'aventura', vida_noturna: 'vida_noturna', descansar: 'bem_estar', explorar: 'natureza' }
 
 const DICAS: Record<Passo, string> = {
   onde: 'Pode escolher mais de uma cidade, na ordem da viagem. Eu monto o caminho no mapa.',
   quando: 'Toque no dia da ida e depois no da volta. Ainda sem datas? Ela fica salva como ideia.',
   quem: 'Isso me ajuda a sugerir passeios e o ritmo certo para o grupo.',
+  estilo: 'Com isso eu monto dias no seu ritmo: quantos passeios, que horas começar e como se deslocar.',
   interesses: 'Escolha o que mais combina com você. Uso isso nas sugestões e no roteiro.',
   reservas: 'Se já tem voo ou hotel, me mande os comprovantes depois que criar: eu leio e organizo tudo.',
 }
@@ -62,6 +67,12 @@ export default function NovaViagem() {
   const [companhia, setCompanhia] = useState<string | null>(null)
   const [pessoas, setPessoas] = useState(2)
   const [interesses, setInteresses] = useState<string[]>([])
+  const [ritmo, setRitmo] = useState<string | null>(null)
+  const [orcamento, setOrcamento] = useState<string | null>(null)
+  const [horario, setHorario] = useState<string | null>(null)
+  const [desloc, setDesloc] = useState<string[]>([])
+  const [primeiraVez, setPrimeiraVez] = useState<boolean | null>(null)
+  const [imperdivel, setImperdivel] = useState('')
   const [reservas, setReservas] = useState<'tenho' | 'nao' | null>(null)
   const [titulo, setTitulo] = useState('')
   const [tituloMexido, setTituloMexido] = useState(false)
@@ -70,9 +81,13 @@ export default function NovaViagem() {
 
   // interesses já ditos no perfil de viagem entram marcados
   useEffect(() => {
-    rest<{ objetivos?: string[] }[]>('GET', 'perfil_viagem?select=objetivos').then((p) => {
-      const o = (p?.[0]?.objetivos || []).map((x) => DE_OBJETIVO[x]).filter(Boolean)
+    rest<{ objetivos?: string[]; ritmo?: string; horario?: string; deslocamento?: string[] }[]>('GET', 'perfil_viagem?select=objetivos,ritmo,horario,deslocamento').then((p) => {
+      const f = p?.[0]
+      const o = (f?.objetivos || []).map((x) => DE_OBJETIVO[x]).filter(Boolean)
       if (o.length) setInteresses((a) => (a.length ? a : Array.from(new Set(o))))
+      if (f?.ritmo) setRitmo((r) => r ?? f.ritmo!)
+      if (f?.horario) setHorario((h) => h ?? f.horario!)
+      if (f?.deslocamento?.length) setDesloc((d) => (d.length ? d : f.deslocamento!.filter((x) => DESLOC.some((y) => y[0] === x))))
     }).catch(() => { /* sem perfil ainda */ })
   }, [])
 
@@ -82,20 +97,21 @@ export default function NovaViagem() {
     onde: destinos.length ? juntar(destinos.map((d) => d.nome)) : 'Escolha um destino',
     quando: semDatas ? 'Ainda não sei' : inicio ? (fim ? `${curta(inicio)} – ${curta(fim)} · ${nDias(inicio, fim)} dias` : `${curta(inicio)} – escolha a volta`) : 'Escolha as datas',
     quem: companhia ? (COMPANHIA.find((c) => c[0] === companhia)?.[1] || '') + (companhia === 'amigos' || companhia === 'familia' ? ` · ${pessoas} pessoas` : '') : 'Escolha',
+    estilo: ritmo || orcamento ? [RITMO.find((r) => r[0] === ritmo)?.[1], ORCAMENTO.find((o) => o[0] === orcamento)?.[1], HORARIO.find((h) => h[0] === horario)?.[1]].filter(Boolean).join(' · ') : 'Ritmo, orçamento e horários',
     interesses: interesses.length ? INTERESSES.filter((i) => interesses.includes(i[0])).map((i) => i[1]).join(', ') : 'Opcional',
     reservas: reservas === 'tenho' ? 'Já tenho — a Lia lê' : reservas === 'nao' ? 'Ainda não reservei' : 'Opcional',
   }
-  const feito: Record<Passo, boolean> = { onde: destinos.length > 0, quando: semDatas || !!(inicio && fim), quem: !!companhia, interesses: interesses.length > 0, reservas: !!reservas }
+  const feito: Record<Passo, boolean> = { onde: destinos.length > 0, quando: semDatas || !!(inicio && fim), quem: !!companhia, estilo: !!(ritmo && orcamento), interesses: interesses.length > 0, reservas: !!reservas }
 
   const proximo = () => {
     const i = PASSOS.indexOf(aberto)
     const falta = PASSOS.slice(i + 1).find((p) => !feito[p]) || PASSOS[Math.min(i + 1, PASSOS.length - 1)]
     setAberto(falta)
   }
-  const ultimo = aberto === 'reservas' || PASSOS.every((p) => feito[p] || p === 'interesses' || p === 'reservas')
+  const ultimo = aberto === 'reservas' || PASSOS.every((p) => feito[p] || p === 'interesses' || p === 'reservas' || p === 'estilo')
 
   function limpar() {
-    setDestinos([]); setInicio(null); setFim(null); setSemDatas(false); setCompanhia(null); setPessoas(2); setInteresses([]); setReservas(null)
+    setDestinos([]); setInicio(null); setFim(null); setSemDatas(false); setCompanhia(null); setPessoas(2); setInteresses([]); setReservas(null); setRitmo(null); setOrcamento(null); setHorario(null); setDesloc([]); setPrimeiraVez(null); setImperdivel('')
     setTituloMexido(false); setErro(null); setAberto('onde')
   }
 
@@ -109,13 +125,14 @@ export default function NovaViagem() {
       inicio: semDatas ? null : inicio, fim: semDatas ? null : (fim || inicio),
       tipo: nacional ? 'nacional' : 'internacional', dono_id: userId(),
     }
-    const extras = { companhia, pessoas: companhia === 'sozinha' ? 1 : companhia === 'casal' ? 2 : companhia ? pessoas : null, interesses: interesses.length ? interesses : null }
+    const extras = { companhia, pessoas: companhia === 'sozinha' ? 1 : companhia === 'casal' ? 2 : companhia ? pessoas : null, interesses: interesses.length ? interesses : null,
+      ritmo, orcamento, horario, deslocamento: desloc.length ? desloc : null, primeira_vez: primeiraVez, imperdivel: imperdivel.trim().slice(0, 300) || null }
     try {
       let criada: ViagemRow
       try { [criada] = await rest<ViagemRow[]>('POST', 'viagens', { ...base, ...extras }, 'return=representation') }
       catch (e) {
         // banco ainda sem as colunas novas: cria só com o básico
-        if (!/companhia|pessoas|interesses|column/i.test(String((e as Error)?.message))) throw e
+        if (!/companhia|pessoas|interesses|ritmo|orcamento|horario|deslocamento|primeira_vez|imperdivel|column/i.test(String((e as Error)?.message))) throw e
         ;[criada] = await rest<ViagemRow[]>('POST', 'viagens', base, 'return=representation')
       }
       const capa = await buscarCapaWikipedia(destinos[0].nome)
@@ -139,7 +156,7 @@ export default function NovaViagem() {
       const r = await fetch(`${SUPA_URL}/functions/v1/lia-inicio`, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + (await getToken()), apikey: SUPA_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preencher: t, atual: { destinos: destinos.map((d) => d.nome), inicio, fim, companhia, pessoas, interesses } }),
+        body: JSON.stringify({ preencher: t, atual: { destinos: destinos.map((d) => d.nome), inicio, fim, companhia, pessoas, interesses, ritmo, orcamento, horario, deslocamento: desloc, primeira_vez: primeiraVez, imperdivel } }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d?.erro || 'A Lia não respondeu agora.')
@@ -150,11 +167,17 @@ export default function NovaViagem() {
       if (c.companhia) setCompanhia(c.companhia)
       if (c.pessoas) setPessoas(c.pessoas)
       if (Array.isArray(c.interesses) && c.interesses.length) setInteresses(c.interesses)
+      if (c.ritmo) setRitmo(c.ritmo)
+      if (c.orcamento) setOrcamento(c.orcamento)
+      if (c.horario) setHorario(c.horario)
+      if (Array.isArray(c.deslocamento) && c.deslocamento.length) setDesloc(c.deslocamento)
+      if (typeof c.primeira_vez === 'boolean') setPrimeiraVez(c.primeira_vez)
+      if (c.imperdivel) setImperdivel(c.imperdivel)
       setFala(d.fala || 'Preenchi o que entendi.')
       setPedido('')
       // abre o primeiro cartão que ainda falta
       const f = { onde: !!(c.destinos?.length || destinos.length), quando: !!((c.inicio || inicio) && (c.fim || fim)), quem: !!(c.companhia || companhia) }
-      setAberto(!f.onde ? 'onde' : !f.quando ? 'quando' : !f.quem ? 'quem' : 'interesses')
+      setAberto(!f.onde ? 'onde' : !f.quando ? 'quando' : !f.quem ? 'quem' : !((c.ritmo || ritmo) && (c.orcamento || orcamento)) ? 'estilo' : 'interesses')
     } catch (e) { setFala(e instanceof Error ? e.message : 'Não deu certo agora.') }
     finally { setPensando(false) }
   }
@@ -236,6 +259,34 @@ export default function NovaViagem() {
                 </div>
               </div>
             )}
+          </>
+        ))}
+        {cartao('estilo', '🧭', 'Estilo da viagem', (
+          <>
+            <div className="nv-grupo">Ritmo</div>
+            <div className="nv-opcoes3">
+              {RITMO.map(([k, n, d]) => <button key={k} type="button" className={'nv-opcao nv-col' + (ritmo === k ? ' on' : '')} onClick={() => setRitmo(k)}><b>{n}</b><small>{d}</small></button>)}
+            </div>
+            <div className="nv-grupo">Orçamento</div>
+            <div className="nv-opcoes3">
+              {ORCAMENTO.map(([k, n, e]) => <button key={k} type="button" className={'nv-opcao nv-col' + (orcamento === k ? ' on' : '')} onClick={() => setOrcamento(k)}><b className="nv-cifrao">{e}</b><small>{n}</small></button>)}
+            </div>
+            <div className="nv-grupo">Seus dias</div>
+            <div className="nv-chips">
+              {HORARIO.map(([k, n, e]) => <button key={k} type="button" className={'nv-chip' + (horario === k ? ' on' : '')} onClick={() => setHorario(horario === k ? null : k)}><span aria-hidden="true">{e}</span>{n}</button>)}
+            </div>
+            <div className="nv-grupo">Como prefere se deslocar</div>
+            <div className="nv-chips">
+              {DESLOC.map(([k, n, e]) => <button key={k} type="button" className={'nv-chip' + (desloc.includes(k) ? ' on' : '')} onClick={() => setDesloc((a) => (a.includes(k) ? a.filter((x) => x !== k) : [...a, k]))}><span aria-hidden="true">{e}</span>{n}</button>)}
+            </div>
+            <div className="nv-grupo">É a primeira vez nesse destino?</div>
+            <div className="nv-chips">
+              <button type="button" className={'nv-chip' + (primeiraVez === true ? ' on' : '')} onClick={() => setPrimeiraVez(primeiraVez === true ? null : true)}>Sim, primeira vez</button>
+              <button type="button" className={'nv-chip' + (primeiraVez === false ? ' on' : '')} onClick={() => setPrimeiraVez(primeiraVez === false ? null : false)}>Já conheço</button>
+            </div>
+            <label className="nv-nome">Algo que não pode faltar? (opcional)
+              <input value={imperdivel} maxLength={300} onChange={(e) => setImperdivel(e.target.value)} placeholder="Ex.: ver a Torre Eiffel à noite, jantar de fado" />
+            </label>
           </>
         ))}
         {cartao('interesses', '✨', 'Interesses', (

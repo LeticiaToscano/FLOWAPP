@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
   const doUsuario = (itens || []).filter((i: Record<string, unknown>) => !i.travado && i.origem === 'usuario')
 
   const contexto = {
-    viagem: { titulo: viagem.titulo, destino: viagem.destino, inicio: viagem.inicio, fim: viagem.fim, fuso: viagem.fuso ?? null, companhia: viagem.companhia ?? null, pessoas: viagem.pessoas ?? null, interesses: viagem.interesses ?? null },
+    viagem: { titulo: viagem.titulo, destino: viagem.destino, inicio: viagem.inicio, fim: viagem.fim, fuso: viagem.fuso ?? null, companhia: viagem.companhia ?? null, pessoas: viagem.pessoas ?? null, interesses: viagem.interesses ?? null, ritmo: viagem.ritmo ?? null, orcamento: viagem.orcamento ?? null, horario: viagem.horario ?? null, deslocamento: viagem.deslocamento ?? null, primeira_vez: viagem.primeira_vez ?? null, imperdivel: viagem.imperdivel ?? null },
     perfil: perfil || 'não preenchido — use um ritmo equilibrado',
     reservas: agenda,
     compromissos_travados: travados,
@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
     '- Encaixe os lugares que a pessoa salvou no swipe (os "superlike" com prioridade), agrupados por região.',
     'Regras:',
     '- Use somente dias entre a data de início e a de fim da viagem.',
+    '- As escolhas feitas para ESTA viagem (viagem.ritmo, horario, deslocamento, orcamento, companhia, interesses) valem mais que o perfil geral. Orçamento econômico: priorize grátis/baratos; luxo: experiências e restaurantes de alto padrão. Primeira vez: inclua os clássicos; já conhece: menos óbvio. O imperdivel tem que entrar no roteiro. Família com crianças ou grupo: ritmo mais leve e deslocamentos curtos.',
     '- Respeite o ritmo do perfil (tranquilo: 2–3 atividades por dia; equilibrado: 3–4; intenso: 4–6) e o horário preferido (começa cedo ou mais tarde).',
     '- Considere chegadas, partidas, check-in e deslocamentos das reservas: no dia de chegada e no de partida, planeje pouco e perto do hotel.',
     '- Compromissos travados e itens criados pela pessoa já estão no roteiro: NÃO os repita e não marque nada que conflite com o horário deles.',
