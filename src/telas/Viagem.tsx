@@ -172,12 +172,19 @@ export default function Viagem({ id }: { id: string }) {
         tipoNome={tipoNome}
         item={(i) => Item({ i })}
         alertas={<>
-        {revisar.map((r) => (
-          <button key={'rv' + r.id} type="button" className="card alert" onClick={() => abrirReserva(r.id)}>
-            <strong>Revise: {tipoNome(r.tipo)} {r.origem || r.fornecedor || ''}</strong>
-            <span className="muted" style={{ color: '#D9CFC6' }}>Há uma informação com dúvida (data, fuso ou local). Confira antes de seguir.</span>
-          </button>
-        ))}
+        {revisar.length > 0 && (
+          <section className="card vm-revisar">
+            <div className="vm-revisar-cab"><span className="vm-revisar-ponto" aria-hidden="true" /><strong>{revisar.length === 1 ? '1 reserva para revisar' : `${revisar.length} reservas para revisar`}</strong></div>
+            <span className="muted">Há uma dúvida de data, fuso ou local. Toque para conferir.</span>
+            <div className="vm-revisar-lista">
+              {revisar.map((r) => (
+                <button key={'rv' + r.id} type="button" onClick={() => abrirReserva(r.id)}>
+                  <span>{tipoNome(r.tipo)} · {r.fornecedor || r.origem || r.destino || 'sem nome'}</span><span aria-hidden="true">›</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         {cancel.map((r) => (
           <button key={'cc' + r.id} type="button" className="card alert" onClick={() => abrirReserva(r.id)}>
             <strong>Cancelamento grátis termina em breve</strong>

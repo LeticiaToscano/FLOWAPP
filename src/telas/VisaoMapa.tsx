@@ -31,6 +31,41 @@ export async function geocodificar(lugar: string): Promise<Geo | null> {
   } catch { return null }
 }
 
+/** Cidades da viagem, na ordem: hotéis primeiro; senão chegadas de voo/trem (sem a volta); senão o que estiver no destino. */
+function lugaresDaViagem(v: Row, reservas: Row[]): string[] {
+  const porData = (a: Row, b: Row) => String(a.inicio || '').localeCompare(String(b.inicio || ''))
+  let l: string[] = reservas.filter((r) => r.tipo === 'hotel' && r.destino).sort(porData).map((r) => r.destino)
+  if (!l.length) {
+    const c = reservas.filter((r) => r.destino && ['voo', 'trem', 'onibus'].includes(r.tipo)).sort(porData)
+    l = c.slice(0, Math.max(1, c.length - 1)).map((r) => r.destino)
+  }
+  if (!l.length) {
+    const d = String(v.destino || v.titulo || '')
+    const dentro = d.match(/\(([^)]+)\)/)?.[1]
+    l = dentro ? dentro.split(/,|\s+e\s+/) : d.split(/,|\s+e\s+/)
+  }
+  const vistos = new Set<string>(), out: string[] = []
+  for (const x of l) {
+    const k = x.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase()
+    if (k && !vistos.has(k)) { vistos.add(k); out.push(x.trim()) }
+  }
+  return out.slice(0, 10)
+}
+
+const mx = (g: Ponto) => (g.lng + 180) / 360 * 256
+const my = (g: Ponto) => { const s = Math.sin(g.lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 }
+/** Centro e zoom que mostram todas as cidades na parte do mapa que a folha não cobre. */
+function enquadrar(ps: Ponto[]): { c: Ponto; z: number } | null {
+  if (!ps.length) return null
+  if (ps.length === 1) return { c: ps[0], z: 12 }
+  const xs = ps.map(mx), ys = ps.map(my)
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+  const W = window.innerWidth * 0.8, H = Math.max(120, window.innerHeight * 0.34 - 120)
+  const z = Math.max(2, Math.min(12, Math.log2(Math.min(W / Math.max(x1 - x0, 1e-6), H / Math.max(y1 - y0, 1e-6))) - 0.1))
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+  return { c: { lng: cx / 256 * 360 - 180, lat: Math.atan(Math.sinh(Math.PI * (1 - 2 * cy / 256))) * 180 / Math.PI }, z }
+}
+
 type Clima = { min: number; max: number; chuva: number; luz: number; estacao: string; emoji: string }
 /** Clima típico: média das mesmas datas no ano passado (arquivo histórico aberto do Open-Meteo). */
 async function climaTipico(g: Geo, inicio: string, fim: string): Promise<Clima | null> {
@@ -104,6 +139,7 @@ export default function VisaoMapa(p: {
 }) {
   const v = p.viagem
   const [geo, setGeo] = useState<Geo | null>(null)
+  const [pontos, setPontos] = useState<Geo[]>([])
   const [clima, setClima] = useState<Clima | null | undefined>(undefined)
   const [fer, setFer] = useState<{ data: string; nome: string }[]>([])
   const [aba, setAba] = useState('geral')
@@ -111,11 +147,16 @@ export default function VisaoMapa(p: {
   const [nota, setNota] = useState<string>(v.nota || '')
   const [editandoNota, setEditandoNota] = useState(false)
 
+  const nomes = useMemo(() => lugaresDaViagem(v, p.reservas), [v.destino, v.titulo, p.reservas])
+  const chaveNomes = nomes.join('|')
   useEffect(() => {
     let vivo = true
-    const lugar = v.destino || v.titulo
-    geocodificar(lugar).then(async (g) => {
-      if (!vivo || !g) { setClima(null); return }
+    Promise.all(nomes.map((n) => geocodificar(n))).then(async (gs) => {
+      const ok = gs.filter(Boolean) as Geo[]
+      if (!vivo) return
+      if (!ok.length) { setClima(null); return }
+      setPontos(ok)
+      const g = ok[0]
       setGeo(g)
       if (v.inicio) {
         const fim = v.fim || v.inicio
@@ -124,7 +165,9 @@ export default function VisaoMapa(p: {
       } else setClima(null)
     })
     return () => { vivo = false }
-  }, [v.destino, v.titulo, v.inicio, v.fim])
+  }, [chaveNomes, v.inicio, v.fim])
+  const quadro = useMemo(() => enquadrar(pontos), [pontos])
+  const desloc = Math.round(window.innerHeight * 0.5 - (90 + window.innerHeight * 0.34) / 2)
 
   const dias = useMemo(() => {
     if (!v.inicio) return [] as string[]
@@ -142,10 +185,10 @@ export default function VisaoMapa(p: {
 
   const alfinetes: Alfinete[] = useMemo(() => {
     const a: Alfinete[] = []
-    if (geo) a.push({ lat: geo.lat, lng: geo.lng, rotulo: geo.nome || v.destino, icone: '★' })
+    pontos.forEach((g, k) => a.push({ lat: g.lat, lng: g.lng, rotulo: g.nome, icone: pontos.length > 1 ? String(k + 1) : '★' }))
     for (const s of p.salvos || []) if (typeof s.lat === 'number' && typeof s.lng === 'number') a.push({ lat: s.lat, lng: s.lng, rotulo: s.nome, icone: s.emoji || '•', cor: '#8CA0FF' })
     return a
-  }, [geo, p.salvos, v.destino])
+  }, [pontos, p.salvos])
 
   // Arrastar a alça da folha: para cima abre, para baixo fecha
   const arraste = useRef<number | null>(null)
@@ -174,7 +217,7 @@ export default function VisaoMapa(p: {
   return (
     <div className={'vm' + (alta ? ' alta' : '')}>
       <div className="vm-mapa">
-        {geo ? <Mapa centro={geo} zoom={12} alfinetes={alfinetes} deslocarY={alta ? 0 : 140} /> : <div className="vm-mapa-vazio" />}
+        {quadro ? <Mapa centro={quadro.c} zoom={quadro.z} alfinetes={alfinetes} deslocarY={alta ? 0 : desloc} /> : <div className="vm-mapa-vazio" />}
       </div>
 
       <div className="vm-botoes">
@@ -196,7 +239,7 @@ export default function VisaoMapa(p: {
           <img src={p.capa} alt="" />
           <div>
             <h1>{v.titulo}</h1>
-            <span>{v.inicio ? `${fmtDia(v.inicio)}${v.fim ? ' – ' + fmtDia(v.fim) : ''}` : 'Sem data'}{v.destino ? ' · ' + v.destino : ''}</span>
+            <span>{v.inicio ? `${fmtDia(v.inicio)}${v.fim ? ' – ' + fmtDia(v.fim) : ''}` : 'Sem data'}{v.destino && !String(v.titulo || '').includes(v.destino) ? ' · ' + v.destino : ''}</span>
           </div>
         </header>
 
