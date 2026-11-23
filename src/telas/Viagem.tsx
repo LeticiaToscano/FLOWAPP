@@ -11,6 +11,7 @@ import { ClaudeChatInput } from '../components/ui/claude-style-chat-input'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
 import { MenuDock, type AbaDock } from '../components/menu-dock'
+import VisaoMapa from './VisaoMapa'
 import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
@@ -93,6 +94,7 @@ export default function Viagem({ id }: { id: string }) {
   // Modo conversa: ouve, envia sozinho quando a pessoa para de falar, a Lia responde em voz alta e volta a ouvir
   const [conversa, setConversa] = useState(false)
   const [visita, setVisita] = useState('ola')
+  const [descobrir, setDescobrir] = useState(false)
   useEffect(() => () => { calar(); reconhecedor.current?.abort?.() }, [])
   const conversaRef = useRef(false)
   const textoRef = useRef('')
@@ -152,14 +154,17 @@ export default function Viagem({ id }: { id: string }) {
       const t = new Date(r.cancelamento_gratis_ate).getTime()
       return t > agora && t - agora < 72 * 3600e3
     })
-    const hoje = roteiro.filter((i) => i.dia === hojeISO())
 
     return (
-      <>
-        <img className="capa-mini" src={capaDa(viagem!, capas)} alt={`Foto de ${viagem!.destino || viagem!.titulo}`} />
-        {!viagem!.capa_path && !capaDaRegiao(viagem!) && viagem!.capa_credito && <span className="credito">{viagem!.capa_credito}</span>}
-        <p className="muted">{fmtDataLonga(hojeISO())}</p>
-
+      <VisaoMapa
+        viagem={viagem!}
+        capa={capaDa(viagem!, capas)}
+        reservas={reservas}
+        roteiro={roteiro}
+        docs={docs}
+        tipoNome={tipoNome}
+        item={(i) => Item({ i })}
+        alertas={<>
         {revisar.map((r) => (
           <button key={'rv' + r.id} type="button" className="card alert" onClick={() => abrirReserva(r.id)}>
             <strong>Revise: {tipoNome(r.tipo)} {r.origem || r.fornecedor || ''}</strong>
@@ -173,6 +178,8 @@ export default function Viagem({ id }: { id: string }) {
           </button>
         ))}
 
+        </>}
+        proximo={<>
         {prox ? (
           <section className="card">
             <div className="row between"><span className="eyebrow">Próximo passo</span><Status r={prox} /></div>
@@ -211,10 +218,16 @@ export default function Viagem({ id }: { id: string }) {
           </div>
         )}
 
-        {hoje.length > 0 && (<><h2>Hoje no roteiro</h2>{hoje.map((i) => <Fragment key={i.id}>{Item({ i })}</Fragment>)}</>)}
         {pendentes.length > 0 && <p className="muted">{pendentes.length} reserva(s) com pagamento pendente. Veja em Reservas.</p>}
-
-      </>
+        </>}
+        aoSair={() => { window.location.hash = '#/viagens' }}
+        aoGerarRoteiro={() => { irPara('roteiro'); void pedirRoteiroIA() }}
+        aoEditar={() => irPara('perfil')}
+        aoMais={() => irPara('assistente')}
+        aoDescobrir={() => setDescobrir(true)}
+        aoAbrirDocumentos={() => irPara('documentos')}
+        aoSalvarNota={async (nota) => { try { await rest('PATCH', `viagens?id=eq.${id}`, { nota: nota.slice(0, 2000) }); await recarregar() } catch (e) { erro(erroPt(e)) } }}
+      />
     )
   }
 
@@ -1291,6 +1304,16 @@ export default function Viagem({ id }: { id: string }) {
 
   const conteudo = { hoje: Hoje, reservas: Reservas, roteiro: Roteiro, documentos: Documentos, assistente: Assistente, perfil: Perfil }[aba]
   const abas: [AbaDock, string][] = [['hoje', 'Hoje'], ['roteiro', 'Roteiro'], ['reservas', 'Reservas'], ['documentos', 'Documentos'], ['assistente', NOME_IA], ['perfil', 'Perfil']]
+
+  if (aba === 'hoje') {
+    return (
+      <div className="tela tela-mapa">
+        {aviso && <div className="vm-aviso"><AvisoBox aviso={aviso} /></div>}
+        {Hoje()}
+        <MenuDock abas={abas} atual={aba} aoEscolher={irPara} />
+      </div>
+    )
+  }
 
   return (
     <div className="tela">
