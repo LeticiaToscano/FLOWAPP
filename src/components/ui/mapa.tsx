@@ -3,15 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 /**
  * Mapa escuro feito à mão (sem biblioteca): blocos de imagem do mapa (256 px) montados pela posição,
  * arrastar com o dedo/mouse, zoom com pinça, roda ou botões, e alfinetes por latitude/longitude.
- * Os blocos vêm do estilo "Dark Matter" da CARTO, com dados do OpenStreetMap (créditos no canto).
+ * Os blocos vêm do OpenStreetMap (crédito obrigatório no canto), escurecidos por CSS.
  */
 
 export type Alfinete = { lat: number; lng: number; rotulo?: string; icone?: string; cor?: string; onClick?: () => void }
 export type Ponto = { lat: number; lng: number }
 
 const TAM = 256
-const SUB = ['a', 'b', 'c', 'd']
-const bloco = (z: number, x: number, y: number) => `https://${SUB[(x + y) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}@2x.png`
+// OpenStreetMap padrão (gratuito, sem chave); escurecido por filtro de CSS para ficar no tema preto.
+const bloco = (z: number, x: number, y: number) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
 
 // Projeção de Mercator (a mesma dos mapas da web), em pixels do mundo no zoom z
 const paraPx = (p: Ponto, z: number) => {
@@ -126,7 +126,7 @@ export default function Mapa({ centro, zoom = 12, alfinetes = [], deslocarY = 0,
         <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => zoomEm(1)} aria-label="Aproximar">+</button>
         <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => zoomEm(-1)} aria-label="Afastar">−</button>
       </div>
-      <span className="mapa-credito">© OpenStreetMap · © CARTO</span>
+      <a className="mapa-credito" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>© OpenStreetMap</a>
     </div>
   )
 }
