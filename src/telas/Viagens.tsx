@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { CirculoInicio, ordenarViagens } from '../components/inicio-circulo'
-import { NovaTripCard, TripCard } from '../components/ui/trip-card'
-import { fmtData } from '../lib/tempo'
-import { capaDaRegiao, NOME_REGIAO, regiaoDaViagem } from '../lib/regioes'
+
+import { capaDaRegiao } from '../lib/regioes'
 import { AvisoBox, enviar, type Aviso } from '../components/comum'
 import { authReq, baixarArquivo, getSessao, rest, setSessao, userId } from '../lib/supabase'
 import { buscarCapaWikipedia, capaPadrao } from '../lib/capa'
@@ -88,51 +87,7 @@ export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; 
   }
 
   // Minhas viagens: cards com a foto, o nome, o destino e as datas, mais o card de criar uma nova
-  if (lista) {
-    const dias = (v: ViagemRow) => (v.inicio && v.fim ? Math.round((+new Date(v.fim) - +new Date(v.inicio)) / 864e5) + 1 : null)
-    const hoje = new Date().toISOString().slice(0, 10)
-    return (
-      <div className="viagens">
-        <header className="viagens-topo">
-          <a className="icon-btn" href="#/viagens" aria-label="Voltar ao início">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-          </a>
-          <h1>Minhas viagens</h1>
-          <button type="button" className="btn sm" onClick={sair}>Sair</button>
-        </header>
-        <div className="viagens-base viagens-base-larga">
-          <AvisoBox aviso={aviso} />
-          {!carregado && <p className="muted">Carregando suas viagens…</p>}
-          <div className="trip-cards">
-            {carregado && ordenarViagens(viagens).map((v) => {
-              const d = dias(v)
-              const reg = regiaoDaViagem(v)
-              const tipo = reg ? NOME_REGIAO[reg] : v.tipo === 'nacional' ? 'Nacional' : 'Internacional'
-              const quando = v.fim && v.fim < hoje ? 'Já aconteceu' : v.inicio && v.inicio <= hoje ? 'Acontecendo agora' : null
-              return (
-                <TripCard
-                  key={v.id}
-                  href={`#/viagem/${v.id}`}
-                  imagem={capaDa(v, capas)}
-                  imagemAlt={`Foto de ${v.destino || v.titulo}`}
-                  rotulo={[tipo, d ? `${d} ${d === 1 ? 'dia' : 'dias'}` : null, quando].filter(Boolean).join(' · ')}
-                  titulo={v.titulo}
-                  local={v.destino}
-                  rodape={v.inicio ? (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                      <span><strong>{fmtData(v.inicio)}</strong>{v.fim ? ` até ${fmtData(v.fim)}` : ''}</span>
-                    </>
-                  ) : <span>Sem data definida</span>}
-                />
-              )
-            })}
-            {carregado && <NovaTripCard href="#/nova" />}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (lista) return <MinhasViagens viagens={viagens} carregado={carregado} capas={capas} aviso={aviso} sair={sair} />
 
   // Casa do app: o mesmo círculo do fim da abertura, parado — viagens para abrir ou começar uma nova
   if (!nova) {
@@ -176,6 +131,96 @@ export default function Viagens({ nova, lista, avisoInicial }: { nova: boolean; 
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+/* ---------- Minhas viagens: cartões grandes de foto (Suas viagens / Ideias de viagem) ---------- */
+const DIA = 864e5
+const meiaNoite = (iso: string) => new Date(iso + 'T00:00:00').getTime()
+function situacao(v: ViagemRow) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const h = hoje.getTime()
+  if (!v.inicio) return { quando: 'Sem data', status: 'Ideia', tom: 'ideia' }
+  const ini = meiaNoite(v.inicio), fim = v.fim ? meiaNoite(v.fim) : ini
+  if (h < ini) {
+    const d = Math.round((ini - h) / DIA)
+    return { quando: d === 1 ? 'Amanhã' : d < 60 ? `Em ${d} dias` : `Em ${Math.round(d / 30)} meses`, status: 'Planejamento', tom: 'plano' }
+  }
+  if (h <= fim) return { quando: 'Agora', status: 'Em viagem', tom: 'agora' }
+  const d = Math.round((h - fim) / DIA)
+  return { quando: d < 60 ? `Há ${d} dias` : `Há ${Math.round(d / 30)} meses`, status: 'Concluída', tom: 'fim' }
+}
+
+function MinhasViagens({ viagens, carregado, capas, aviso, sair }: { viagens: ViagemRow[]; carregado: boolean; capas: Record<string, string>; aviso: Aviso; sair: () => void }) {
+  const [aba, setAba] = useState<'suas' | 'ideias'>('suas')
+  const [busca, setBusca] = useState<string | null>(null)
+  const termo = (busca || '').trim().toLowerCase()
+  const filtradas = viagens.filter((v) => !termo || `${v.titulo} ${v.destino || ''}`.toLowerCase().includes(termo))
+  const ideias = filtradas.filter((v) => !v.inicio)
+  const comData = ordenarViagens(filtradas.filter((v) => v.inicio))
+  const grupos: [string, ViagemRow[]][] = [
+    ['Acontecendo agora', comData.filter((v) => situacao(v).tom === 'agora')],
+    ['Próximas viagens', comData.filter((v) => situacao(v).tom === 'plano')],
+    ['Já aconteceram', comData.filter((v) => situacao(v).tom === 'fim')],
+  ]
+  const dias = (v: ViagemRow) => (v.inicio && v.fim ? Math.round((meiaNoite(v.fim) - meiaNoite(v.inicio)) / DIA) + 1 : null)
+  const cartao = (v: ViagemRow) => {
+    const st = situacao(v), d = dias(v)
+    const lugar = (v.destino || v.titulo).replace(/\s*\([A-Z]{3}\)\s*/g, '')
+    return (
+      <a key={v.id} className="mv-cartao" href={`#/viagem/${v.id}`}>
+        <img src={capaDa(v, capas)} alt="" loading="lazy" decoding="async" />
+        <div className="mv-veu" />
+        <div className="mv-topo">
+          <span className="mv-chip">{st.quando}</span>
+          {d && <span className="mv-chip">{d} {d === 1 ? 'dia' : 'dias'}</span>}
+        </div>
+        <div className="mv-base">
+          <strong className="mv-lugar">{lugar}</strong>
+          {v.destino && v.titulo.toLowerCase() !== lugar.toLowerCase() && <span className="mv-titulo">{v.titulo}</span>}
+          <span className={'mv-status ' + st.tom}><i />{st.status}</span>
+        </div>
+      </a>
+    )
+  }
+  return (
+    <div className="mv">
+      <header className="mv-cab">
+        <a className="mv-redondo" href="#/viagens" aria-label="Voltar ao início">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </a>
+        <span className="mv-logo">FLOW</span>
+        <button type="button" className="mv-redondo mv-sair" onClick={sair} aria-label="Sair da conta">Sair</button>
+      </header>
+
+      <div className="mv-seg" role="tablist">
+        <button type="button" role="tab" aria-selected={aba === 'suas'} className={aba === 'suas' ? 'on' : ''} onClick={() => setAba('suas')}>Suas viagens</button>
+        <button type="button" role="tab" aria-selected={aba === 'ideias'} className={aba === 'ideias' ? 'on' : ''} onClick={() => setAba('ideias')}>Ideias de viagem</button>
+      </div>
+
+      <div className="mv-ferr">
+        {busca === null
+          ? <button type="button" className="mv-redondo" onClick={() => setBusca('')} aria-label="Buscar viagem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></button>
+          : <input className="mv-busca" autoFocus placeholder="Buscar por nome ou destino" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => !busca && setBusca(null)} />}
+        <a className="mv-pilula" href="#/lia"><span className="fim-lia-orbe" aria-hidden="true" />Criar com a Lia</a>
+        <a className="mv-pilula" href="#/nova">+ Nova</a>
+      </div>
+
+      <AvisoBox aviso={aviso} />
+      {!carregado && <p className="muted mv-vazio">Carregando suas viagens…</p>}
+      {carregado && aba === 'suas' && (
+        comData.length === 0
+          ? <p className="muted mv-vazio">{termo ? 'Nenhuma viagem com esse nome.' : 'Nenhuma viagem com data ainda. Crie uma com a Lia ou veja suas ideias.'}</p>
+          : grupos.filter(([, l]) => l.length).map(([t, l]) => (
+            <section key={t} className="mv-grupo"><h2>{t}</h2>{l.map(cartao)}</section>
+          ))
+      )}
+      {carregado && aba === 'ideias' && (
+        ideias.length === 0
+          ? <p className="muted mv-vazio">Viagens sem data ficam aqui, como ideias. Conte para a Lia aonde você sonha ir.</p>
+          : <section className="mv-grupo">{ideias.map(cartao)}</section>
+      )}
     </div>
   )
 }
