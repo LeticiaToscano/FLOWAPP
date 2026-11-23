@@ -3,14 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 /**
  * Mapa escuro feito à mão (sem biblioteca): blocos de imagem do mapa (256 px) montados pela posição,
  * arrastar com o dedo/mouse, zoom com pinça, roda ou botões, e alfinetes por latitude/longitude.
- * Os blocos vêm do OpenStreetMap (crédito obrigatório no canto), escurecidos por CSS.
+ * Os blocos vêm do OpenStreetMap (crédito obrigatório no canto), nas cores originais.
  */
 
 export type Alfinete = { lat: number; lng: number; rotulo?: string; icone?: string; cor?: string; onClick?: () => void }
 export type Ponto = { lat: number; lng: number }
 
 const TAM = 256
-// OpenStreetMap padrão (gratuito, sem chave); escurecido por filtro de CSS para ficar no tema preto.
+// OpenStreetMap padrão (gratuito, sem chave), nas cores originais.
 const bloco = (z: number, x: number, y: number) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
 
 // Projeção de Mercator (a mesma dos mapas da web), em pixels do mundo no zoom z

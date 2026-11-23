@@ -463,7 +463,7 @@ s{color:var(--muted)}
 /* Mapa feito à mão */
 .mapa{position:absolute;inset:0;overflow:hidden;background:#0B0C0E;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
 .mapa:active{cursor:grabbing}
-.mapa-blocos{position:absolute;inset:0;filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.35)}
+.mapa-blocos{position:absolute;inset:0}
 .mapa-blocos img{position:absolute;max-width:none;pointer-events:none;image-rendering:auto}
 .mapa-pino{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;padding:0;cursor:pointer;color:#fff;z-index:2}
 .mapa-pino-bola{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#141414;border:2px solid var(--cor);box-shadow:0 6px 16px rgba(0,0,0,.6);font-size:14px;font-weight:700;color:var(--cor)}
