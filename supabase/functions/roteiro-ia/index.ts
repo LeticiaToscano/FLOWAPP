@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
 
   // Limite por pessoa
   const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-  const { count } = await db.from('uso_ia').select('id', { count: 'exact', head: true }).gte('criado_em', desde)
+  const { count } = await db.from('uso_ia').select('id', { count: 'exact', head: true }).eq('tipo', 'roteiro').gte('criado_em', desde)
   if ((count ?? 0) >= LIMITE_DIA) {
     return responder({ erro: `Você já pediu ${LIMITE_DIA} roteiros nas últimas 24 horas. Tente de novo amanhã.` }, 429)
   }
@@ -95,10 +95,11 @@ Deno.serve(async (req) => {
   if (!viagem) return responder({ erro: 'Viagem não encontrada.' }, 404)
   if (!viagem.inicio || !viagem.fim) return responder({ erro: 'Defina as datas da viagem antes de pedir o roteiro.' }, 400)
 
-  const [{ data: reservas }, { data: itens }, { data: perfil }] = await Promise.all([
+  const [{ data: reservas }, { data: itens }, { data: perfil }, { data: salvos }] = await Promise.all([
     db.from('reservas').select('*').eq('viagem_id', viagemId).order('inicio', { ascending: true }),
     db.from('roteiro_itens').select('dia,hora,titulo,regiao,travado,origem').eq('viagem_id', viagemId),
     db.from('perfil_viagem').select('objetivos,ritmo,horario,deslocamento,restricoes,imperdivel').eq('usuario_id', quem.user.id).maybeSingle(),
+    db.from('lugares_salvos').select('nome,categoria,regiao,decisao').eq('viagem_id', viagemId).neq('decisao', 'passou').limit(60),
   ])
 
   // Só horários e lugares das reservas — nada de códigos, bilhetes, valores ou arquivos
@@ -118,12 +119,14 @@ Deno.serve(async (req) => {
     reservas: agenda,
     compromissos_travados: travados,
     itens_que_a_pessoa_criou: doUsuario,
+    lugares_que_a_pessoa_salvou: salvos || [],
   }
 
   const sistema = [
     'Você é o planejador de roteiros do Flow, um app de viagem premium para brasileiros.',
     'Monte um roteiro dia a dia, realista e bem distribuído, em português do Brasil.',
     'Responda SEMPRE chamando a ferramenta propor_roteiro, sem texto fora dela.',
+    '- Encaixe os lugares que a pessoa salvou no swipe (os "superlike" com prioridade), agrupados por região.',
     'Regras:',
     '- Use somente dias entre a data de início e a de fim da viagem.',
     '- Respeite o ritmo do perfil (tranquilo: 2–3 atividades por dia; equilibrado: 3–4; intenso: 4–6) e o horário preferido (começa cedo ou mais tarde).',
@@ -138,7 +141,7 @@ Deno.serve(async (req) => {
   ].join('\n')
 
   // Registra o uso antes de chamar a IA (conta mesmo se a IA falhar, para ninguém forçar repetições)
-  await db.from('uso_ia').insert({ viagem_id: viagemId })
+  await db.from('uso_ia').insert({ viagem_id: viagemId, tipo: 'roteiro' })
 
   // Chama a IA; se ela responder em texto em vez de usar a ferramenta, pede de novo uma vez (o modelo não aceita forçar)
   const pedir = async (messages: unknown[]) => {

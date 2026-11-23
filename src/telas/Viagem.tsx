@@ -12,6 +12,7 @@ import { VoicePoweredOrb } from '../components/ui/voice-powered-orb'
 import { OrbePensando } from '../components/ui/orbe-pensando'
 import { MenuDock, type AbaDock } from '../components/menu-dock'
 import VisaoMapa from './VisaoMapa'
+import Descobrir from './Descobrir'
 import { calar, destravarVoz, ehAVez, falar, ligarVoz, novaVez, tocar, vozLigada } from '../lib/voz'
 
 type Row = Record<string, any>
@@ -95,6 +96,11 @@ export default function Viagem({ id }: { id: string }) {
   const [conversa, setConversa] = useState(false)
   const [visita, setVisita] = useState('ola')
   const [descobrir, setDescobrir] = useState(false)
+  const [salvos, setSalvos] = useState<Row[]>([])
+  const carregarSalvos = useCallback(async () => {
+    try { setSalvos(await rest<Row[]>('GET', `lugares_salvos?viagem_id=eq.${id}&decisao=neq.passou&select=id,nome,lat,lng,emoji,decisao`)) } catch { /* tabela ainda não criada */ }
+  }, [id])
+  useEffect(() => { void carregarSalvos() }, [carregarSalvos])
   useEffect(() => () => { calar(); reconhecedor.current?.abort?.() }, [])
   const conversaRef = useRef(false)
   const textoRef = useRef('')
@@ -162,6 +168,7 @@ export default function Viagem({ id }: { id: string }) {
         reservas={reservas}
         roteiro={roteiro}
         docs={docs}
+        salvos={salvos}
         tipoNome={tipoNome}
         item={(i) => Item({ i })}
         alertas={<>
@@ -1311,6 +1318,7 @@ export default function Viagem({ id }: { id: string }) {
         {aviso && <div className="vm-aviso"><AvisoBox aviso={aviso} /></div>}
         {Hoje()}
         <MenuDock abas={abas} atual={aba} aoEscolher={irPara} />
+        {descobrir && <Descobrir viagemId={id} aoFechar={(n) => { setDescobrir(false); void carregarSalvos(); if (n) ok(`${n} lugar(es) salvo(s). Eles entram no próximo roteiro.`) }} />}
       </div>
     )
   }
