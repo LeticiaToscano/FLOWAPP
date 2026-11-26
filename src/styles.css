@@ -679,3 +679,9 @@ button.vm-card{cursor:pointer}
 .nv-opcao.nv-col small{font-size:12px;color:#8F8F8F;font-weight:500;line-height:1.3}
 .nv-opcao.on small{color:#CDBF9C}
 .nv-cifrao{color:var(--gold);letter-spacing:.05em}
+.vm-pega{flex:none;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.vm-pega .vm-abas{touch-action:pan-x}
+.vm-folha.nivel0{height:min(330px,42svh)}
+.vm-folha.nivel0 .vm-conteudo{opacity:0;pointer-events:none}
+.vm-folha.puxando{transition:none}
+.vm-folha.puxando .vm-conteudo{opacity:1}

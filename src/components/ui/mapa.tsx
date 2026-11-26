@@ -16,7 +16,9 @@ type Fonte = 'stadia' | 'osm'
 const bloco = (f: Fonte, z: number, x: number, y: number) => f === 'stadia'
   ? `https://tiles.stadiamaps.com/tiles/osm_bright/${z}/${x}/${y}@2x.png`
   : `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
-let fonteDaSessao: Fonte = 'stadia'
+// Stadia só depois de o domínio ser cadastrado na conta (senão ela devolve uma imagem de erro, não um erro).
+const USAR_STADIA = false
+let fonteDaSessao: Fonte = USAR_STADIA ? 'stadia' : 'osm'
 
 // Projeção de Mercator (a mesma dos mapas da web), em pixels do mundo no zoom z
 const paraPx = (p: Ponto, z: number) => {

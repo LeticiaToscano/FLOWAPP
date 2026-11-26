@@ -143,7 +143,40 @@ export default function VisaoMapa(p: {
   const [clima, setClima] = useState<Clima | null | undefined>(undefined)
   const [fer, setFer] = useState<{ data: string; nome: string }[]>([])
   const [aba, setAba] = useState('geral')
-  const [alta, setAlta] = useState(false) // folha aberta (quase tela inteira) ou na metade
+  // folha em 3 alturas: 0 = baixa (mais mapa), 1 = metade, 2 = tela quase inteira. Arrasta pela alça ou pelo topo.
+  const [nivel, setNivel] = useState<0 | 1 | 2>(1)
+  const alta = nivel === 2
+  const setAlta = (v: boolean | ((a: boolean) => boolean)) => setNivel((n) => ((typeof v === 'function' ? v(n === 2) : v) ? 2 : 1))
+  const [puxando, setPuxando] = useState<number | null>(null) // altura ao vivo enquanto arrasta
+  const folhaRef = useRef<HTMLElement | null>(null)
+  const alturas = () => { const h = window.innerHeight; return [Math.min(330, h * 0.42), h * 0.66, h - 76] }
+  const inicioArraste = useRef<{ y: number; h: number; t: number; ultimo: number } | null>(null)
+  const pegar = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('.vm-abas button')) return
+    inicioArraste.current = { y: e.clientY, ultimo: e.clientY, h: folhaRef.current?.getBoundingClientRect().height || alturas()[nivel], t: Date.now() }
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+  }
+  const mover = (e: React.PointerEvent) => {
+    const a = inicioArraste.current; if (!a) return
+    a.ultimo = e.clientY
+    const dy = e.clientY - a.y
+    if (Math.abs(dy) < 4 && puxando == null) return
+    const [b, , t] = alturas()
+    setPuxando(Math.max(b - 40, Math.min(t, a.h - dy)))
+  }
+  const soltar = (e: React.PointerEvent) => {
+    const a = inicioArraste.current; inicioArraste.current = null
+    if (!a) return
+    // pointercancel chega sem posição confiável: usa o último ponto do arraste
+    const dy = (e.type === 'pointercancel' ? a.ultimo : e.clientY) - a.y
+    if (Math.abs(dy) < 6) { setPuxando(null); if ((e.target as HTMLElement).closest('.vm-alca')) setNivel((n) => (n === 2 ? 1 : 2)); return }
+    const vel = dy / Math.max(1, Date.now() - a.t) // px/ms
+    const hs = alturas(), atual = a.h - dy
+    let n = hs.reduce((m, h, i) => (Math.abs(h - atual) < Math.abs(hs[m] - atual) ? i : m), 0) as 0 | 1 | 2
+    if (vel < -0.5) n = Math.min(2, Math.max(n, nivel + 1)) as 0 | 1 | 2
+    if (vel > 0.5) n = Math.max(0, Math.min(n, nivel - 1)) as 0 | 1 | 2
+    setPuxando(null); setNivel(n)
+  }
   const [nota, setNota] = useState<string>(v.nota || '')
   const [editandoNota, setEditandoNota] = useState(false)
 
@@ -167,7 +200,7 @@ export default function VisaoMapa(p: {
     return () => { vivo = false }
   }, [chaveNomes, v.inicio, v.fim])
   const quadro = useMemo(() => enquadrar(pontos), [pontos])
-  const desloc = Math.round(window.innerHeight * 0.5 - (90 + window.innerHeight * 0.34) / 2)
+  const desloc = Math.round(window.innerHeight * 0.5 - (90 + window.innerHeight - alturas()[nivel]) / 2)
 
   const dias = useMemo(() => {
     if (!v.inicio) return [] as string[]
@@ -191,7 +224,6 @@ export default function VisaoMapa(p: {
   }, [pontos, p.salvos])
 
   // Arrastar a alça da folha: para cima abre, para baixo fecha
-  const arraste = useRef<number | null>(null)
 
   const docsOk = p.docs.filter((d) => d.status === 'em_dia').length
   const docsPend = p.docs.filter((d) => d.status !== 'em_dia')
@@ -229,9 +261,10 @@ export default function VisaoMapa(p: {
         </button>
       </div>
 
-      <section className="vm-folha" aria-label="Sua viagem">
-        <button type="button" className="vm-alca" aria-label={alta ? 'Baixar a folha' : 'Subir a folha'} onClick={() => setAlta((a) => !a)}
-          onPointerDown={(e) => { arraste.current = e.clientY }} onPointerUp={(e) => { if (arraste.current != null) { const dy = e.clientY - arraste.current; if (dy < -30) setAlta(true); if (dy > 30) setAlta(false) } arraste.current = null }}>
+      <section ref={folhaRef} className={'vm-folha nivel' + nivel + (puxando != null ? ' puxando' : '')} aria-label="Sua viagem" style={puxando != null ? { height: puxando } : undefined}>
+        <div className="vm-pega" onPointerDown={pegar} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={soltar}>
+        <button type="button" className="vm-alca" aria-label={alta ? 'Baixar a folha' : 'Subir a folha'}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setNivel((n) => (n === 2 ? 1 : 2)) } }}>
           <span />
         </button>
 
@@ -247,6 +280,7 @@ export default function VisaoMapa(p: {
           <button type="button" className={aba === 'geral' ? 'on' : ''} onClick={() => setAba('geral')}>Visão geral</button>
           {dias.map((d, k) => <button key={d} type="button" className={aba === d ? 'on' : ''} onClick={() => { setAba(d); setAlta(true) }}>Dia {k + 1}</button>)}
         </nav>
+        </div>
 
         <div className="vm-conteudo">
           {aba === 'geral' ? (
